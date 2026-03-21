@@ -1,0 +1,3810 @@
+openapi: 3.1.0
+info:
+  title: Partner Integration Hub
+  summary: At-least-once B2B webhook delivery with HMAC, retries, DLQ, and audited
+    replay.
+  description: Inbound uses HMAC-SHA256 (`X-Hub-Signature-256`) over `{timestamp}.{raw_body}`
+    and Bearer API keys. First accept returns **202**; duplicate Idempotency-Key returns
+    **200**. JSON `id` fields are UUIDv7 public identifiers, never sequential database
+    keys. Correlation `X-Correlation-Id` is UUIDv7. Internal outbound is tagged `internal`
+    and is not partner-facing.
+  version: 0.1.0
+servers:
+- url: http://localhost:8000
+  description: Local Compose
+paths:
+  /inbound/v1/health:
+    get:
+      tags:
+      - health
+      summary: Inbound liveness probe
+      description: Process liveness for the inbound listener. No authentication.
+      operationId: inbound_health_inbound_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '422':
+          description: Invalid X-Correlation-Id (must be UUID version 7).
+  /internal/v1/health:
+    get:
+      tags:
+      - health
+      summary: Internal liveness probe
+      description: Process liveness for internal platform callers. No authentication.
+      operationId: internal_health_internal_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '422':
+          description: Invalid X-Correlation-Id (must be UUID version 7).
+  /admin/v1/partners:
+    post:
+      tags:
+      - admin
+      summary: Create partner
+      description: Provisions a partner and returns the HMAC signing secret once.
+        `id` in the response is the public UUIDv7, never the sequential database key.
+      operationId: create_partner_admin_v1_partners_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerCreate'
+            examples:
+              acme:
+                summary: Provision a new partner
+                description: Creates a partner and returns the signing secret once.
+                value:
+                  slug: acme-erp
+                  name: ACME ERP
+                  sla_seconds: 60
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerCreatedResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Partner not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+    get:
+      tags:
+      - admin
+      summary: List partners
+      description: Paginated partner directory. Identifiers are public UUIDv7 values.
+      operationId: list_partners_admin_v1_partners_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          description: Maximum number of items to return (default 50, max 200).
+          default: 50
+          title: Limit
+        description: Maximum number of items to return (default 50, max 200).
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Number of items to skip before returning results.
+          default: 0
+          title: Offset
+        description: Number of items to skip before returning results.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPartnersResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Partner not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/partners/{id}:
+    get:
+      tags:
+      - admin
+      summary: Get partner
+      description: Returns partner configuration by public UUIDv7. Signing secrets
+        are never included.
+      operationId: get_partner_admin_v1_partners__id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Partner public UUIDv7 identifier.
+          title: Id
+        description: Partner public UUIDv7 identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Partner not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+    patch:
+      tags:
+      - admin
+      summary: Update partner
+      description: Partial update of status, SLA, rate limit, auto-replay, or circuit-breaker
+        config.
+      operationId: update_partner_admin_v1_partners__id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Partner public UUIDv7 identifier.
+          title: Id
+        description: Partner public UUIDv7 identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerUpdate'
+            examples:
+              activate:
+                summary: Mark partner active
+                value:
+                  status: active
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Partner not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/partners/{id}/api-keys:
+    post:
+      tags:
+      - admin
+      summary: Create API key
+      description: 'Issues a partner API key. The full key is returned once; store
+        it out-of-band. Typical scopes: `inbound:write`, `status:read`.'
+      operationId: create_api_key_admin_v1_partners__id__api_keys_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Partner public UUIDv7 identifier.
+          title: Id
+        description: Partner public UUIDv7 identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCreate'
+            examples:
+              inbound_write:
+                summary: Inbound write key
+                value:
+                  scopes:
+                  - inbound:write
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyCreatedResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Partner not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/partners/{id}/rotate-secret:
+    post:
+      tags:
+      - admin
+      summary: Rotate partner signing secret
+      description: Rotates the partner HMAC signing secret with an overlap window
+        (`hub_secret_rotation_overlap_hours`, default 24h). The previous secret remains
+        valid for inbound verification until `valid_until`. Returns the new plaintext
+        secret once.
+      operationId: rotate_signing_secret_admin_v1_partners__id__rotate_secret_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Partner public UUIDv7 identifier.
+          title: Id
+        description: Partner public UUIDv7 identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RotateSecretResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Partner not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/analytics/partners/{id}/summary:
+    get:
+      tags:
+      - admin
+      summary: Partner analytics summary
+      description: Rolling 24-hour delivery compliance metrics from PostgreSQL (success
+        rate, p95 latency, SLA compliance, circuit state, DLQ age).
+      operationId: get_partner_analytics_summary_admin_v1_analytics_partners__id__summary_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Partner public UUIDv7 identifier.
+          title: Id
+        description: Partner public UUIDv7 identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerAnalyticsSummary'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Partner not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/analytics/overview:
+    get:
+      tags:
+      - admin
+      summary: Fleet analytics overview
+      description: 'Rolling 24-hour fleet snapshot: DLQ backlog, average SLA compliance,
+        and top failing partners by success rate.'
+      operationId: get_analytics_overview_admin_v1_analytics_overview_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsOverview'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Partner not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+      security:
+      - HTTPBearer: []
+  /admin/v1/analytics/compliance-export:
+    get:
+      tags:
+      - admin
+      summary: Weekly SLA compliance export
+      description: 'Export per-partner success rate, SLA compliance, breaches, and
+        DLQ counts for a custom ISO-8601 time window. Default response is CSV; send
+        Accept: application/json for a structured payload.'
+      operationId: get_compliance_export_admin_v1_analytics_compliance_export_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: Inclusive window start (ISO 8601).
+          title: From
+        description: Inclusive window start (ISO 8601).
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: Inclusive window end (ISO 8601).
+          title: To
+        description: Inclusive window end (ISO 8601).
+      - name: accept
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: text/csv (default) or application/json.
+          title: Accept
+        description: text/csv (default) or application/json.
+      responses:
+        '200':
+          description: Compliance export for the requested window.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceExportResponse'
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Partner not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/deliveries:
+    get:
+      tags:
+      - admin
+      summary: List deliveries
+      description: Paginated delivery list. Path and `partner_id` filters use public
+        UUIDv7 identifiers. Payload may be present on detail views only according
+        to the response model.
+      operationId: list_deliveries_admin_v1_deliveries_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: partner_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Filter by partner public UUIDv7 identifier.
+          title: Partner Id
+        description: Filter by partner public UUIDv7 identifier.
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/DeliveryStatus'
+          - type: 'null'
+          description: Filter by delivery status.
+          title: Status
+        description: Filter by delivery status.
+      - name: event_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by event type.
+          title: Event Type
+        description: Filter by event type.
+      - name: from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          description: Inclusive lower bound on created_at (ISO 8601).
+          title: From
+        description: Inclusive lower bound on created_at (ISO 8601).
+      - name: to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          description: Inclusive upper bound on created_at (ISO 8601).
+          title: To
+        description: Inclusive upper bound on created_at (ISO 8601).
+      - name: correlation_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by correlation identifier.
+          title: Correlation Id
+        description: Filter by correlation identifier.
+      - name: sla_breached
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          description: Filter by SLA breach flag.
+          title: Sla Breached
+        description: Filter by SLA breach flag.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          description: Maximum number of items to return (default 50, max 200).
+          default: 50
+          title: Limit
+        description: Maximum number of items to return (default 50, max 200).
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Number of items to skip before returning results.
+          default: 0
+          title: Offset
+        description: Number of items to skip before returning results.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDeliveriesResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Delivery not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Delivery status does not allow replay.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/deliveries/bulk-replay:
+    post:
+      tags:
+      - admin
+      summary: Bulk replay failed deliveries
+      description: Admin-only replay of up to 100 failed deliveries. `reason` is required
+        and audited. Open circuits and rate limits skip individual ids instead of
+        failing the batch.
+      operationId: bulk_replay_deliveries_endpoint_admin_v1_deliveries_bulk_replay_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkReplayRequest'
+            examples:
+              incident_recovery:
+                summary: Bulk replay after partner outage
+                description: Admin-only bulk replay with audit reason; respects circuit
+                  breaker and rate limits.
+                value:
+                  delivery_ids:
+                  - 0194a2b3-c4d5-7890-abcd-ef1234567890
+                  reason: Partner endpoint restored after regional outage.
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkReplayResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Delivery not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Delivery status does not allow replay.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+      security:
+      - HTTPBearer: []
+  /admin/v1/deliveries/test:
+    post:
+      tags:
+      - admin
+      summary: Enqueue sandbox test delivery
+      description: Admin-only test send against a partner endpoint (typically partner-mock).
+        Uses the same persist path as internal outbound; `partner_id` is a public
+        UUIDv7.
+      operationId: sandbox_test_delivery_admin_v1_deliveries_test_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxTestDeliveryRequest'
+            examples:
+              order_created:
+                summary: Sandbox order.created for partner delivery
+                value:
+                  partner_id: 0194a2b3-c4d5-7890-abcd-ef1234567890
+                  event_type: order.created
+                  payload:
+                    order_id: ord_sandbox_1
+                    amount: 42.0
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundEventAcceptedResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Delivery not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Delivery status does not allow replay.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '200':
+          description: Duplicate idempotency_key; same delivery_ids returned without
+            republish.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundEventDuplicateResponse'
+      security:
+      - HTTPBearer: []
+  /admin/v1/deliveries/{id}:
+    get:
+      tags:
+      - admin
+      summary: Get delivery with attempts
+      description: Delivery detail by public UUIDv7, including nested attempts. Replay
+        does not mutate the stored payload.
+      operationId: get_delivery_admin_v1_deliveries__id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Delivery public UUIDv7 identifier.
+          title: Id
+        description: Delivery public UUIDv7 identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Delivery not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Delivery status does not allow replay.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/deliveries/{id}/attempts:
+    get:
+      tags:
+      - admin
+      summary: List delivery attempts
+      description: Paginated HTTP attempt history for a delivery public UUIDv7.
+      operationId: list_delivery_attempts_admin_v1_deliveries__id__attempts_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Delivery public UUIDv7 identifier.
+          title: Id
+        description: Delivery public UUIDv7 identifier.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          description: Maximum number of items to return (default 50, max 200).
+          default: 50
+          title: Limit
+        description: Maximum number of items to return (default 50, max 200).
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Number of items to skip before returning results.
+          default: 0
+          title: Offset
+        description: Number of items to skip before returning results.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAttemptsResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Delivery not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Delivery status does not allow replay.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/deliveries/{id}/replay:
+    post:
+      tags:
+      - admin
+      summary: Replay a failed delivery
+      description: '`reason` is required and written to the audit log. When replay
+        approval is enabled, returns **202** with a pending approval id and does not
+        re-queue yet. Otherwise transitions a **failed** delivery to replaying (**409**
+        if the status is not failed).'
+      operationId: replay_delivery_endpoint_admin_v1_deliveries__id__replay_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Delivery public UUIDv7 identifier.
+          title: Id
+        description: Delivery public UUIDv7 identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryReplayRequest'
+            examples:
+              manual_recovery:
+                summary: Replay after partner outage
+                description: Operator replay with audit reason; optional attempt counter
+                  reset.
+                value:
+                  reason: Partner endpoint restored after maintenance window.
+                  reset_attempt_counter: false
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryReplayResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Delivery not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Delivery status does not allow replay.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '202':
+          description: Replay queued for admin approval.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplayApprovalPendingResponse'
+  /admin/v1/replay-approvals:
+    get:
+      tags:
+      - admin
+      summary: List replay approval requests
+      description: Paginated approval queue. Defaults to `pending`. Delivery ids in
+        the payload are public UUIDv7 values.
+      operationId: list_replay_approvals_admin_v1_replay_approvals_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/ReplayApprovalStatus'
+          - type: 'null'
+          description: Filter by approval status; defaults to pending.
+          title: Status
+        description: Filter by approval status; defaults to pending.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          description: Maximum number of items to return (default 50, max 200).
+          default: 50
+          title: Limit
+        description: Maximum number of items to return (default 50, max 200).
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Number of items to skip before returning results.
+          default: 0
+          title: Offset
+        description: Number of items to skip before returning results.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReplayApprovalsResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Replay approval not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Replay approval is not pending.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/replay-approvals/{id}/approve:
+    post:
+      tags:
+      - admin
+      summary: Approve a pending replay request
+      description: Admin-only. Re-queues the failed delivery using the original payload.
+        Non-pending rows return **409**.
+      operationId: approve_replay_approval_endpoint_admin_v1_replay_approvals__id__approve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Replay approval public UUIDv7 identifier.
+          title: Id
+        description: Replay approval public UUIDv7 identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplayApprovalActionResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Replay approval not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Replay approval is not pending.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/replay-approvals/{id}/reject:
+    post:
+      tags:
+      - admin
+      summary: Reject a pending replay request
+      description: Admin-only. `reason` is required and audited. Non-pending rows
+        return **409**.
+      operationId: reject_replay_approval_endpoint_admin_v1_replay_approvals__id__reject_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Replay approval public UUIDv7 identifier.
+          title: Id
+        description: Replay approval public UUIDv7 identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplayApprovalRejectRequest'
+            examples:
+              duplicate:
+                summary: Reject a duplicate replay request
+                value:
+                  reason: Duplicate replay request; partner already recovered.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplayApprovalRejectedResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Replay approval not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Replay approval is not pending.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/dead-letters:
+    get:
+      tags:
+      - admin
+      summary: List dead-letter queue entries
+      description: Paginated DLQ. Identifiers are public UUIDv7 values. Manual purge
+        tombstones use reason `manual_purge`.
+      operationId: list_dead_letters_admin_v1_dead_letters_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          description: Maximum number of items to return (default 50, max 200).
+          default: 50
+          title: Limit
+        description: Maximum number of items to return (default 50, max 200).
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Number of items to skip before returning results.
+          default: 0
+          title: Offset
+        description: Number of items to skip before returning results.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDeadLettersResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Dead-letter entry not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Dead-letter entry already acknowledged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/dead-letters/{id}/ack:
+    post:
+      tags:
+      - admin
+      summary: Acknowledge a dead-letter entry
+      description: Marks a DLQ row acknowledged (operator). Already-acknowledged rows
+        return **409**. Does not replay the delivery.
+      operationId: acknowledge_dead_letter_admin_v1_dead_letters__id__ack_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Dead-letter public UUIDv7 identifier.
+          title: Id
+        description: Dead-letter public UUIDv7 identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterAckResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Dead-letter entry not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Dead-letter entry already acknowledged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/dead-letters/{id}:
+    delete:
+      tags:
+      - admin
+      summary: Purge (tombstone) a dead-letter entry
+      description: Admin-only tombstone. `reason` is required and audited. Sets the
+        DLQ reason to `manual_purge`.
+      operationId: purge_dead_letter_admin_v1_dead_letters__id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Dead-letter public UUIDv7 identifier.
+          title: Id
+        description: Dead-letter public UUIDv7 identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeadLetterPurgeRequest'
+            examples:
+              false_positive:
+                summary: Tombstone after a contract fix
+                value:
+                  reason: False positive after contract fix.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterPurgeResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Dead-letter entry not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '409':
+          description: Dead-letter entry already acknowledged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/partners/{id}/endpoints:
+    post:
+      tags:
+      - admin
+      summary: Create partner endpoint
+      description: Registers an inbound or outbound HTTP endpoint for the partner.
+        Outbound URLs receive signed webhooks; `event_types` selects fan-out.
+      operationId: create_endpoint_admin_v1_partners__id__endpoints_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Partner public UUIDv7 identifier.
+          title: Id
+        description: Partner public UUIDv7 identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndpointCreate'
+            examples:
+              outbound_orders:
+                summary: Outbound order events
+                value:
+                  direction: outbound
+                  url: https://partner.example/hooks/orders
+                  event_types:
+                  - order.created
+                  - order.updated
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Endpoint not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/endpoints/{id}:
+    get:
+      tags:
+      - admin
+      summary: Get endpoint
+      description: Returns endpoint configuration. `id` is the endpoint UUIDv7.
+      operationId: get_endpoint_admin_v1_endpoints__id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Endpoint UUIDv7 identifier.
+          title: Id
+        description: Endpoint UUIDv7 identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Endpoint not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+    patch:
+      tags:
+      - admin
+      summary: Update endpoint
+      description: Partial update of URL, event types, SLA, or status (active / paused
+        / disabled).
+      operationId: update_endpoint_admin_v1_endpoints__id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Endpoint UUIDv7 identifier.
+          title: Id
+        description: Endpoint UUIDv7 identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndpointUpdate'
+            examples:
+              pause:
+                summary: Pause outbound delivery
+                value:
+                  status: paused
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '404':
+          description: Endpoint not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/v1/schemas:
+    post:
+      tags:
+      - admin
+      summary: Register payload JSON Schema
+      description: Registers a JSON Schema (Draft 2020-12) for an event type. Inbound
+        and outbound payloads are validated against the latest active version.
+      operationId: create_payload_schema_admin_v1_schemas_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayloadSchemaCreate'
+            examples:
+              order_created_v1:
+                summary: order.created requires order_id
+                value:
+                  event_type: order.created
+                  version: 1
+                  json_schema:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    type: object
+                    properties:
+                      order_id:
+                        type: string
+                    required:
+                    - order_id
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayloadSchemaResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+    get:
+      tags:
+      - admin
+      summary: List payload schemas for an event type
+      description: Lists schema versions for `event_type`, newest first.
+      operationId: list_payload_schemas_admin_v1_schemas_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: event_type
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Filter by event type name.
+          title: Event Type
+        description: Filter by event type name.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayloadSchemaListResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '403':
+          description: Insufficient role for this operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /inbound/v1/{partner_slug}/events:
+    post:
+      tags:
+      - inbound
+      summary: Ingest partner webhook event
+      description: Accepts a partner webhook. Sign the raw body with HMAC-SHA256 over
+        `{X-Hub-Timestamp}.{raw_body}` and send the hex digest in `X-Hub-Signature-256`
+        (optional `sha256=` prefix). First unique `Idempotency-Key` returns **202**;
+        the same key returns **200** with the original `event_id`. Path `{partner_slug}`
+        is lowercase kebab-case. JSON `event_id` is a UUIDv7 public identifier.
+      operationId: ingest_event_inbound_v1__partner_slug__events_post
+      parameters:
+      - name: partner_slug
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Partner slug identifier (lowercase kebab-case).
+          title: Partner Slug
+        description: Partner slug identifier (lowercase kebab-case).
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Bearer partner API key with `inbound:write`. Missing or invalid
+            returns 401.
+          title: Authorization
+        description: Bearer partner API key with `inbound:write`. Missing or invalid
+          returns 401.
+      - name: X-Hub-Signature-256
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Required HMAC-SHA256 hex digest of `{timestamp}.{raw_body}`
+            using the partner signing secret. Optional `sha256=` prefix. Missing or
+            invalid returns 403.
+          title: X-Hub-Signature-256
+        description: Required HMAC-SHA256 hex digest of `{timestamp}.{raw_body}` using
+          the partner signing secret. Optional `sha256=` prefix. Missing or invalid
+          returns 403.
+      - name: X-Hub-Timestamp
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Required Unix timestamp (seconds) used in the HMAC payload.
+            Skew beyond the configured tolerance returns 403.
+          title: X-Hub-Timestamp
+        description: Required Unix timestamp (seconds) used in the HMAC payload. Skew
+          beyond the configured tolerance returns 403.
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Required. First accept is 202; repeating the same key returns
+            200 with the original event_id. Missing or blank returns 422.
+          title: Idempotency-Key
+        description: Required. First accept is 202; repeating the same key returns
+          200 with the original event_id. Missing or blank returns 422.
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundEventAcceptedResponse'
+        '200':
+          description: Duplicate Idempotency-Key; same event_id returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundEventDuplicateResponse'
+        '401':
+          description: Missing or invalid API key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundErrorResponse'
+        '403':
+          description: Invalid HMAC signature or timestamp skew.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundErrorResponse'
+        '404':
+          description: Partner not found or inactive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundErrorResponse'
+        '409':
+          description: Idempotency key conflict while persisting; safe to retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundErrorResponse'
+        '413':
+          description: Request body exceeds the 256 KB payload limit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundErrorResponse'
+        '422':
+          description: Invalid event schema or event type.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundErrorResponse'
+        '429':
+          description: Partner rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              description: JSON body for inbound webhook POST.
+              properties:
+                event_type:
+                  description: Event type (e.g. order.created).
+                  title: Event Type
+                  type: string
+                payload:
+                  additionalProperties: true
+                  description: Opaque event payload from partner.
+                  title: Payload
+                  type: object
+              required:
+              - event_type
+              - payload
+              title: InboundEventBody
+              type: object
+            examples:
+              happy:
+                summary: Accepted order.created webhook
+                value:
+                  event_type: order.created
+                  payload:
+                    order_id: ord_123
+                    amount: 99.99
+              bad_timestamp:
+                summary: Valid body; timestamp skew rejected with 403
+                description: Use X-Hub-Timestamp more than 300 seconds from server
+                  time.
+                value:
+                  event_type: order.created
+                  payload:
+                    order_id: ord_456
+  /internal/v1/outbound/events:
+    post:
+      tags:
+      - internal
+      summary: Enqueue outbound partner webhook delivery
+      description: Platform-only enqueue. `partner_id` is the partner public UUIDv7.
+        Creates one delivery per matching active endpoint. First unique `idempotency_key`
+        returns **202**; the same key returns **200** with the original `delivery_ids`.
+        Not partner-facing.
+      operationId: create_outbound_event_internal_v1_outbound_events_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OutboundEventRequest'
+            examples:
+              order_created:
+                summary: Enqueue order.created for partner delivery
+                value:
+                  partner_id: 0194a2b3-c4d5-7890-abcd-ef1234567890
+                  event_type: order.created
+                  payload:
+                    order_id: ord_123
+                    amount: 99.99
+                  idempotency_key: idem-order-created-1
+                  correlation_id: 0194a2b3-c4d5-7890-abcd-ef1234567891
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundEventAcceptedResponse'
+        '200':
+          description: Duplicate idempotency_key; same delivery_ids returned without
+            republish.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundEventDuplicateResponse'
+        '401':
+          description: Missing or invalid admin credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundErrorResponse'
+        '403':
+          description: Caller role is not allowed to enqueue outbound deliveries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundErrorResponse'
+        '404':
+          description: Partner not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundErrorResponse'
+        '409':
+          description: Idempotency key conflict while persisting; safe to retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundErrorResponse'
+        '422':
+          description: Inactive partner, unsupported event type, or invalid correlation_id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundErrorResponse'
+      security:
+      - HTTPBearer: []
+  /partner/v1/deliveries/{delivery_id}:
+    get:
+      tags:
+      - partner
+      summary: Get delivery status
+      description: Read-only status for a delivery owned by the authenticated partner.
+        `delivery_id` is the public UUIDv7. Webhook payload is never returned. Another
+        partner's delivery returns **404**.
+      operationId: get_delivery_status_partner_v1_deliveries__delivery_id__get
+      parameters:
+      - name: delivery_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Delivery public UUIDv7 identifier.
+          title: Delivery Id
+        description: Delivery public UUIDv7 identifier.
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Bearer partner API key with `status:read`. Missing or invalid
+            returns 401; wrong scope returns 403.
+          title: Authorization
+        description: Bearer partner API key with `status:read`. Missing or invalid
+          returns 401; wrong scope returns 403.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerDeliveryStatusResponse'
+        '401':
+          description: Missing or invalid API key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerErrorResponse'
+        '403':
+          description: API key lacks status:read scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerErrorResponse'
+        '404':
+          description: Delivery not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AdminErrorResponse:
+      properties:
+        detail:
+          type: string
+          title: Detail
+          description: Human-readable error message.
+      type: object
+      required:
+      - detail
+      title: AdminErrorResponse
+      description: Standard admin API error payload.
+    AnalyticsCircuitState:
+      type: string
+      enum:
+      - closed
+      - open
+      - half_open
+      - unknown
+      title: AnalyticsCircuitState
+    AnalyticsOverview:
+      properties:
+        window_hours:
+          type: integer
+          title: Window Hours
+          description: Rolling analytics window length in hours.
+          examples:
+          - 24
+        dlq_count:
+          type: integer
+          minimum: 0.0
+          title: Dlq Count
+          description: Current dead-letter backlog (excludes manual_purge tombstones).
+          examples:
+          - 12
+        avg_sla_compliance_pct:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Avg Sla Compliance Pct
+          description: Mean per-partner SLA compliance among partners with terminal
+            deliveries in the window; null when none.
+          examples:
+          - 96.2
+        top_failing_partners:
+          items:
+            $ref: '#/components/schemas/TopFailingPartner'
+          type: array
+          title: Top Failing Partners
+          description: Up to five partners with lowest success_rate, then highest
+            sla_breaches.
+      type: object
+      required:
+      - window_hours
+      - dlq_count
+      - avg_sla_compliance_pct
+      - top_failing_partners
+      title: AnalyticsOverview
+      description: Fleet-wide analytics snapshot.
+    ApiKeyCreate:
+      properties:
+        scopes:
+          items:
+            type: string
+          type: array
+          title: Scopes
+          description: OAuth-style scopes granted to the API key.
+          examples:
+          - - inbound:write
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+          description: Optional expiration timestamp (UTC).
+      type: object
+      title: ApiKeyCreate
+      description: Body for POST /admin/v1/partners/{id}/api-keys.
+    ApiKeyCreatedResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: API key public identifier (UUIDv7).
+        key:
+          type: string
+          title: Key
+          description: Full API key plaintext. Shown only once; store out-of-band.
+        key_prefix:
+          type: string
+          title: Key Prefix
+          description: Key prefix for lookup and display (first 16 characters).
+        scopes:
+          items:
+            type: string
+          type: array
+          title: Scopes
+          description: Granted scopes.
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+          description: Expiration timestamp if set.
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Creation timestamp (UTC).
+      type: object
+      required:
+      - id
+      - key
+      - key_prefix
+      - scopes
+      - created_at
+      title: ApiKeyCreatedResponse
+      description: API key creation response — plaintext key shown once.
+    BulkReplayRequest:
+      properties:
+        delivery_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          maxItems: 100
+          minItems: 1
+          title: Delivery Ids
+          description: Delivery public UUIDv7 identifiers to replay (1–100, deduplicated).
+        reason:
+          type: string
+          title: Reason
+          description: Required admin reason for audit trail (non-empty).
+          examples:
+          - Partner endpoint restored after maintenance.
+      type: object
+      required:
+      - delivery_ids
+      - reason
+      title: BulkReplayRequest
+      description: Body for POST /admin/v1/deliveries/bulk-replay.
+    BulkReplayResponse:
+      properties:
+        requested:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Requested
+          description: Delivery public IDs submitted after deduplication (input order
+            preserved).
+        replayed:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Replayed
+          description: Deliveries successfully enqueued for replay.
+        skipped_open_circuit:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Skipped Open Circuit
+          description: Skipped because partner circuit breaker is open.
+        skipped_rate_limited:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Skipped Rate Limited
+          description: Skipped because partner rate limit denied the request.
+        skipped_invalid_status:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Skipped Invalid Status
+          description: Skipped because delivery status is not failed.
+        not_found:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Not Found
+          description: Delivery public IDs that do not exist.
+      type: object
+      required:
+      - requested
+      title: BulkReplayResponse
+      description: Bulk replay outcome with per-category UUID lists.
+    ComplianceExportResponse:
+      properties:
+        rows:
+          items:
+            $ref: '#/components/schemas/ComplianceExportRow'
+          type: array
+          title: Rows
+          description: One row per partner with activity in the requested window.
+      type: object
+      required:
+      - rows
+      title: ComplianceExportResponse
+      description: JSON compliance export payload.
+    ComplianceExportRow:
+      properties:
+        partner_slug:
+          type: string
+          title: Partner Slug
+          description: Partner slug (primary identifier in CSV exports).
+          examples:
+          - acme-erp
+        success_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Success Rate
+          description: Delivered divided by terminal deliveries in the window; null
+            when the partner has no terminal rows.
+          examples:
+          - 0.92
+        sla_compliance_pct:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Sla Compliance Pct
+          description: Percentage of terminal deliveries without SLA breach in the
+            window; null when the partner has no terminal rows.
+          examples:
+          - 98.5
+        sla_breaches:
+          type: integer
+          minimum: 0.0
+          title: Sla Breaches
+          description: Count of terminal deliveries with sla_breached=true in the
+            window.
+          examples:
+          - 2
+        dlq_count:
+          type: integer
+          minimum: 0.0
+          title: Dlq Count
+          description: Dead-letter entries created for the partner in the window (excludes
+            manual_purge tombstones).
+          examples:
+          - 3
+      type: object
+      required:
+      - partner_slug
+      - success_rate
+      - sla_compliance_pct
+      - sla_breaches
+      - dlq_count
+      title: ComplianceExportRow
+      description: Per-partner SLA compliance metrics for a reporting window.
+    DeadLetterAckResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Dead-letter public UUIDv7 identifier.
+        acknowledged_at:
+          type: string
+          format: date-time
+          title: Acknowledged At
+          description: Acknowledgement timestamp (UTC).
+        acknowledged_by:
+          type: string
+          title: Acknowledged By
+          description: Operator or admin principal id.
+      type: object
+      required:
+      - id
+      - acknowledged_at
+      - acknowledged_by
+      title: DeadLetterAckResponse
+      description: DLQ acknowledge response.
+    DeadLetterPurgeRequest:
+      properties:
+        reason:
+          type: string
+          title: Reason
+          description: Required admin reason for purge audit trail (non-empty).
+          examples:
+          - False positive after contract fix.
+      type: object
+      required:
+      - reason
+      title: DeadLetterPurgeRequest
+      description: Body for DELETE /admin/v1/dead-letters/{id}.
+    DeadLetterPurgeResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Dead-letter public UUIDv7 identifier.
+        reason:
+          type: string
+          title: Reason
+          description: Terminal reason after purge (manual_purge).
+      type: object
+      required:
+      - id
+      - reason
+      title: DeadLetterPurgeResponse
+      description: DLQ purge (tombstone) response.
+    DeadLetterResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Dead-letter public UUIDv7 identifier.
+        delivery_id:
+          type: string
+          format: uuid
+          title: Delivery Id
+          description: Related delivery public UUIDv7 identifier.
+        partner_id:
+          type: string
+          format: uuid
+          title: Partner Id
+          description: Partner public UUIDv7 identifier.
+        reason:
+          type: string
+          title: Reason
+          description: Terminal failure reason code.
+        last_http_status:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Last Http Status
+          description: Last HTTP status from partner when applicable.
+        last_error_message:
+          type: string
+          title: Last Error Message
+          description: Last error message captured at DLQ time.
+        acknowledged_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Acknowledged At
+          description: When an operator acknowledged this DLQ entry.
+        acknowledged_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Acknowledged By
+          description: Operator id who acknowledged this DLQ entry.
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: DLQ row creation timestamp.
+      type: object
+      required:
+      - id
+      - delivery_id
+      - partner_id
+      - reason
+      - last_error_message
+      - created_at
+      title: DeadLetterResponse
+      description: Dead-letter queue row.
+    DeliveryAttemptResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Attempt public UUIDv7 identifier.
+        attempt_number:
+          type: integer
+          title: Attempt Number
+          description: 1-based attempt sequence number.
+        requested_at:
+          type: string
+          format: date-time
+          title: Requested At
+          description: When the HTTP request was sent.
+        responded_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Responded At
+          description: When the HTTP response was received, if any.
+        http_status_code:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Http Status Code
+          description: Partner HTTP status code when a response was received.
+        error_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Type
+          description: Transport or client error classification when no HTTP status.
+        duration_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Ms
+          description: Round-trip duration in milliseconds.
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Row creation timestamp.
+      type: object
+      required:
+      - id
+      - attempt_number
+      - requested_at
+      - created_at
+      title: DeliveryAttemptResponse
+      description: Single HTTP delivery attempt.
+    DeliveryReplayRequest:
+      properties:
+        reason:
+          type: string
+          title: Reason
+          description: Required operator reason for audit trail (non-empty).
+          examples:
+          - Partner endpoint restored after maintenance.
+        reset_attempt_counter:
+          type: boolean
+          title: Reset Attempt Counter
+          description: When true, resets attempt_count to zero before re-queueing.
+          default: false
+      type: object
+      required:
+      - reason
+      title: DeliveryReplayRequest
+      description: Body for POST /admin/v1/deliveries/{id}/replay.
+    DeliveryReplayResponse:
+      properties:
+        delivery_id:
+          type: string
+          format: uuid
+          title: Delivery Id
+          description: Delivery public UUIDv7 identifier.
+        status:
+          $ref: '#/components/schemas/DeliveryStatus'
+          description: Delivery status after replay request (replaying).
+      type: object
+      required:
+      - delivery_id
+      - status
+      title: DeliveryReplayResponse
+      description: Replay acceptance response.
+    DeliveryResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Delivery public UUIDv7 identifier.
+        partner_id:
+          type: string
+          format: uuid
+          title: Partner Id
+          description: Partner public UUIDv7 identifier.
+        endpoint_id:
+          type: string
+          format: uuid
+          title: Endpoint Id
+          description: Partner endpoint UUID.
+        event_type:
+          type: string
+          title: Event Type
+          description: Outbound event type.
+        status:
+          $ref: '#/components/schemas/DeliveryStatus'
+          description: Delivery lifecycle status.
+        attempt_count:
+          type: integer
+          title: Attempt Count
+          description: Number of completed delivery attempts.
+        max_attempts:
+          type: integer
+          title: Max Attempts
+          description: Maximum attempts before terminal failure.
+        idempotency_key:
+          type: string
+          title: Idempotency Key
+          description: Partner deduplication key (unchanged on replay).
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+          description: Webhook JSON payload (immutable on replay).
+        correlation_id:
+          type: string
+          title: Correlation Id
+          description: End-to-end correlation identifier.
+        sla_deadline_at:
+          type: string
+          format: date-time
+          title: Sla Deadline At
+          description: SLA deadline for first success.
+        sla_breached:
+          type: boolean
+          title: Sla Breached
+          description: Whether SLA was breached before first success.
+        first_success_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: First Success At
+          description: Timestamp of first HTTP 2xx; unchanged by replay.
+        last_error_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error Code
+          description: Last terminal or retryable error code.
+        last_error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error Message
+          description: Last error message from partner or transport.
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Delivery creation timestamp.
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Last update timestamp.
+        attempts:
+          items:
+            $ref: '#/components/schemas/DeliveryAttemptResponse'
+          type: array
+          title: Attempts
+          description: Nested delivery attempts (detail view only).
+      type: object
+      required:
+      - id
+      - partner_id
+      - endpoint_id
+      - event_type
+      - status
+      - attempt_count
+      - max_attempts
+      - idempotency_key
+      - payload
+      - correlation_id
+      - sla_deadline_at
+      - sla_breached
+      - created_at
+      - updated_at
+      title: DeliveryResponse
+      description: Delivery summary for list and detail views.
+    DeliveryStatus:
+      type: string
+      enum:
+      - pending
+      - delivering
+      - delivered
+      - retrying
+      - failed
+      - replaying
+      title: DeliveryStatus
+    EndpointCreate:
+      properties:
+        direction:
+          $ref: '#/components/schemas/EndpointDirection'
+          description: Traffic direction for this endpoint.
+        url:
+          type: string
+          minLength: 1
+          title: Url
+          description: HTTPS webhook URL (outbound) or registered inbound URL.
+        event_types:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Event Types
+          description: Subscribed event type names.
+          examples:
+          - - order.created
+        sla_seconds:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Sla Seconds
+          description: Optional per-endpoint SLA override in seconds.
+        max_attempts:
+          anyOf:
+          - type: integer
+            maximum: 255.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Attempts
+          description: Maximum delivery attempts (snapshot at delivery creation).
+        timeout_connect_ms:
+          anyOf:
+          - type: integer
+            minimum: 100.0
+          - type: 'null'
+          title: Timeout Connect Ms
+          description: HTTP connect timeout in milliseconds.
+        timeout_read_ms:
+          anyOf:
+          - type: integer
+            minimum: 100.0
+          - type: 'null'
+          title: Timeout Read Ms
+          description: HTTP read timeout in milliseconds.
+      type: object
+      required:
+      - direction
+      - url
+      - event_types
+      title: EndpointCreate
+      description: Body for POST /admin/v1/partners/{id}/endpoints.
+    EndpointDirection:
+      type: string
+      enum:
+      - outbound
+      - inbound
+      title: EndpointDirection
+    EndpointResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Endpoint public identifier (UUIDv7 primary key).
+        partner_id:
+          type: string
+          format: uuid
+          title: Partner Id
+          description: Owning partner public identifier (UUIDv7).
+        direction:
+          $ref: '#/components/schemas/EndpointDirection'
+          description: Traffic direction.
+        url:
+          type: string
+          title: Url
+          description: Configured webhook URL.
+        event_types:
+          items:
+            type: string
+          type: array
+          title: Event Types
+          description: Subscribed event types.
+        status:
+          $ref: '#/components/schemas/EndpointStatus'
+          description: Endpoint status.
+        sla_seconds:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Sla Seconds
+          description: Per-endpoint SLA override if set.
+        max_attempts:
+          type: integer
+          title: Max Attempts
+          description: Maximum delivery attempts.
+        timeout_connect_ms:
+          type: integer
+          title: Timeout Connect Ms
+          description: Connect timeout in milliseconds.
+        timeout_read_ms:
+          type: integer
+          title: Timeout Read Ms
+          description: Read timeout in milliseconds.
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Creation timestamp (UTC).
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Last update timestamp (UTC).
+      type: object
+      required:
+      - id
+      - partner_id
+      - direction
+      - url
+      - event_types
+      - status
+      - max_attempts
+      - timeout_connect_ms
+      - timeout_read_ms
+      - created_at
+      - updated_at
+      title: EndpointResponse
+      description: Endpoint details for admin GET responses.
+    EndpointStatus:
+      type: string
+      enum:
+      - active
+      - paused
+      - disabled
+      title: EndpointStatus
+    EndpointUpdate:
+      properties:
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/EndpointStatus'
+          - type: 'null'
+          description: Endpoint status (active, paused, disabled).
+        url:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Url
+          description: Updated webhook URL.
+        event_types:
+          anyOf:
+          - items:
+              type: string
+            type: array
+            minItems: 1
+          - type: 'null'
+          title: Event Types
+          description: Updated subscribed event types.
+        sla_seconds:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Sla Seconds
+          description: Updated SLA override in seconds.
+      type: object
+      title: EndpointUpdate
+      description: Body for PATCH /admin/v1/endpoints/{id}.
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+          description: Liveness status; ok when the process accepts traffic.
+      type: object
+      required:
+      - status
+      title: HealthResponse
+    InboundErrorResponse:
+      properties:
+        detail:
+          type: string
+          title: Detail
+          description: Human-readable error message.
+      type: object
+      required:
+      - detail
+      title: InboundErrorResponse
+      description: Standard inbound API error payload.
+    InboundEventAcceptedResponse:
+      properties:
+        event_id:
+          type: string
+          format: uuid
+          title: Event Id
+          description: Inbound event public UUIDv7 identifier.
+        status:
+          type: string
+          const: accepted
+          title: Status
+          description: Processing status for a newly accepted event.
+          default: accepted
+      type: object
+      required:
+      - event_id
+      title: InboundEventAcceptedResponse
+      description: 202 response when the event is accepted for processing.
+    InboundEventDuplicateResponse:
+      properties:
+        event_id:
+          type: string
+          format: uuid
+          title: Event Id
+          description: Original inbound event UUIDv7 identifier.
+        status:
+          type: string
+          const: duplicate
+          title: Status
+          description: Indicates the idempotency key was already seen.
+          default: duplicate
+      type: object
+      required:
+      - event_id
+      title: InboundEventDuplicateResponse
+      description: 200 response when Idempotency-Key was already processed.
+    OutboundErrorResponse:
+      properties:
+        detail:
+          type: string
+          title: Detail
+          description: Human-readable error message.
+      type: object
+      required:
+      - detail
+      title: OutboundErrorResponse
+      description: Standard internal outbound API error payload.
+    OutboundEventAcceptedResponse:
+      properties:
+        delivery_id:
+          type: string
+          format: uuid
+          title: Delivery Id
+          description: First delivery public UUIDv7 identifier (backward compatibility).
+        delivery_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Delivery Ids
+          description: All delivery public UUIDv7 identifiers created for matching
+            endpoints.
+        status:
+          type: string
+          const: accepted
+          title: Status
+          description: Processing status for a newly accepted delivery.
+          default: accepted
+      type: object
+      required:
+      - delivery_id
+      - delivery_ids
+      title: OutboundEventAcceptedResponse
+      description: 202 response when a new delivery is accepted.
+    OutboundEventDuplicateResponse:
+      properties:
+        delivery_id:
+          type: string
+          format: uuid
+          title: Delivery Id
+          description: First delivery public UUIDv7 identifier (backward compatibility).
+        delivery_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Delivery Ids
+          description: All delivery public UUIDv7 identifiers for the caller idempotency
+            key.
+        status:
+          type: string
+          const: duplicate
+          title: Status
+          description: Indicates the idempotency key was already seen.
+          default: duplicate
+      type: object
+      required:
+      - delivery_id
+      - delivery_ids
+      title: OutboundEventDuplicateResponse
+      description: 200 response when idempotency_key was already processed.
+    OutboundEventRequest:
+      properties:
+        partner_id:
+          type: string
+          format: uuid
+          title: Partner Id
+          description: Partner public UUIDv7 identifier.
+        event_type:
+          type: string
+          title: Event Type
+          description: Event type to deliver (e.g. order.created).
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+          description: Opaque event payload for the partner webhook.
+        idempotency_key:
+          type: string
+          minLength: 1
+          title: Idempotency Key
+          description: Caller-supplied idempotency key; duplicates return the same
+            delivery_ids (one delivery per matching endpoint).
+        correlation_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Correlation Id
+          description: Optional UUIDv7 correlation id; defaults to X-Correlation-Id
+            when omitted.
+      type: object
+      required:
+      - partner_id
+      - event_type
+      - payload
+      - idempotency_key
+      title: OutboundEventRequest
+      description: Body for internal outbound delivery creation.
+    PaginatedAttemptsResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/DeliveryAttemptResponse'
+          type: array
+          title: Items
+          description: Page of result items.
+        total:
+          type: integer
+          title: Total
+          description: Total number of matching items.
+        limit:
+          type: integer
+          title: Limit
+          description: Applied page size limit.
+        offset:
+          type: integer
+          title: Offset
+          description: Applied offset.
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: PaginatedAttemptsResponse
+      description: Paginated delivery attempts.
+    PaginatedDeadLettersResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/DeadLetterResponse'
+          type: array
+          title: Items
+          description: Page of result items.
+        total:
+          type: integer
+          title: Total
+          description: Total number of matching items.
+        limit:
+          type: integer
+          title: Limit
+          description: Applied page size limit.
+        offset:
+          type: integer
+          title: Offset
+          description: Applied offset.
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: PaginatedDeadLettersResponse
+      description: Paginated dead-letter list.
+    PaginatedDeliveriesResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/DeliveryResponse'
+          type: array
+          title: Items
+          description: Page of result items.
+        total:
+          type: integer
+          title: Total
+          description: Total number of matching items.
+        limit:
+          type: integer
+          title: Limit
+          description: Applied page size limit.
+        offset:
+          type: integer
+          title: Offset
+          description: Applied offset.
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: PaginatedDeliveriesResponse
+      description: Paginated delivery list.
+    PaginatedPartnersResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/PartnerResponse'
+          type: array
+          title: Items
+          description: Partners on this page.
+        total:
+          type: integer
+          title: Total
+          description: Total number of matching items.
+        limit:
+          type: integer
+          title: Limit
+          description: Applied page size limit.
+        offset:
+          type: integer
+          title: Offset
+          description: Applied offset.
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: PaginatedPartnersResponse
+      description: Paginated partner list.
+    PaginatedReplayApprovalsResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ReplayApprovalListItem'
+          type: array
+          title: Items
+          description: Page of result items.
+        total:
+          type: integer
+          title: Total
+          description: Total number of matching items.
+        limit:
+          type: integer
+          title: Limit
+          description: Applied page size limit.
+        offset:
+          type: integer
+          title: Offset
+          description: Applied offset.
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: PaginatedReplayApprovalsResponse
+      description: Paginated replay approval queue.
+    PartnerAnalyticsSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Partner public UUIDv7 identifier.
+          examples:
+          - 0194a2b3-c4d5-7890-abcd-ef1234567890
+        slug:
+          type: string
+          title: Slug
+          description: Partner slug (URL-safe identifier).
+          examples:
+          - acme-erp
+        window_hours:
+          type: integer
+          title: Window Hours
+          description: Rolling analytics window length in hours.
+          examples:
+          - 24
+        success_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Success Rate
+          description: Delivered divided by terminal deliveries (delivered + failed)
+            in the window; null when there are no terminal rows.
+          examples:
+          - 0.92
+        p95_latency_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: P95 Latency Ms
+          description: 95th percentile of delivery attempt durations in the window
+            (nearest-rank); null when no timed attempts exist.
+          examples:
+          - 245
+        sla_compliance_pct:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Sla Compliance Pct
+          description: Percentage of terminal deliveries without SLA breach in the
+            window; null when there are no terminal rows.
+          examples:
+          - 98.5
+        sla_breaches:
+          type: integer
+          minimum: 0.0
+          title: Sla Breaches
+          description: Count of terminal deliveries with sla_breached=true in the
+            window.
+          examples:
+          - 2
+        circuit_state:
+          $ref: '#/components/schemas/AnalyticsCircuitState'
+          description: Redis circuit breaker state; unknown when Redis is unavailable.
+          examples:
+          - closed
+        dlq_age_seconds:
+          type: integer
+          minimum: 0.0
+          title: Dlq Age Seconds
+          description: Age in seconds of the oldest unacknowledged dead-letter for
+            this partner; 0 when none.
+          examples:
+          - 3600
+      type: object
+      required:
+      - id
+      - slug
+      - window_hours
+      - success_rate
+      - p95_latency_ms
+      - sla_compliance_pct
+      - sla_breaches
+      - circuit_state
+      - dlq_age_seconds
+      title: PartnerAnalyticsSummary
+      description: 24-hour partner delivery compliance summary.
+    PartnerCreate:
+      properties:
+        slug:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
+          title: Slug
+          description: URL-safe partner identifier (unique, lowercase).
+          examples:
+          - acme-erp
+        name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Name
+          description: Human-readable partner display name.
+          examples:
+          - ACME ERP
+        sla_seconds:
+          type: integer
+          minimum: 1.0
+          title: Sla Seconds
+          description: Target SLA in seconds for first successful delivery.
+          examples:
+          - 60
+        rate_limit_rps:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Rate Limit Rps
+          description: Optional inbound/outbound rate limit override (requests per
+            second).
+      type: object
+      required:
+      - slug
+      - name
+      - sla_seconds
+      title: PartnerCreate
+      description: Body for POST /admin/v1/partners.
+    PartnerCreatedResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Partner public identifier (UUIDv7). Never the internal BIGINT
+            key.
+        slug:
+          type: string
+          title: Slug
+          description: URL-safe partner slug.
+        name:
+          type: string
+          title: Name
+          description: Display name.
+        status:
+          $ref: '#/components/schemas/PartnerStatus'
+          description: Partner lifecycle status.
+        sla_seconds:
+          type: integer
+          title: Sla Seconds
+          description: SLA target in seconds.
+        rate_limit_rps:
+          type: integer
+          title: Rate Limit Rps
+          description: Rate limit in requests per second.
+        auto_replay_enabled:
+          type: boolean
+          title: Auto Replay Enabled
+          description: Scheduled auto-replay flag.
+        circuit_breaker_config:
+          additionalProperties: true
+          type: object
+          title: Circuit Breaker Config
+          description: Circuit breaker configuration.
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Creation timestamp (UTC).
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Last update timestamp (UTC).
+        signing_secret:
+          type: string
+          title: Signing Secret
+          description: Plaintext HMAC signing secret. Shown only on create; store
+            out-of-band.
+      type: object
+      required:
+      - id
+      - slug
+      - name
+      - status
+      - sla_seconds
+      - rate_limit_rps
+      - auto_replay_enabled
+      - circuit_breaker_config
+      - created_at
+      - updated_at
+      - signing_secret
+      title: PartnerCreatedResponse
+      description: Partner creation response — includes signing secret once.
+    PartnerDeliveryStatusResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Delivery public UUIDv7 identifier.
+        status:
+          $ref: '#/components/schemas/DeliveryStatus'
+          description: Delivery lifecycle status.
+        event_type:
+          type: string
+          title: Event Type
+          description: Outbound event type.
+        attempt_count:
+          type: integer
+          title: Attempt Count
+          description: Number of completed delivery attempts.
+        last_error_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error Code
+          description: Last terminal or retryable error code.
+        sla_breached:
+          type: boolean
+          title: Sla Breached
+          description: Whether SLA was breached before first success.
+        first_success_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: First Success At
+          description: Timestamp of first HTTP 2xx; unchanged by replay.
+      type: object
+      required:
+      - id
+      - status
+      - event_type
+      - attempt_count
+      - sla_breached
+      title: PartnerDeliveryStatusResponse
+      description: Read-only delivery status for the authenticated partner.
+    PartnerErrorResponse:
+      properties:
+        detail:
+          type: string
+          title: Detail
+          description: Human-readable error message.
+      type: object
+      required:
+      - detail
+      title: PartnerErrorResponse
+      description: Partner API error body.
+    PartnerResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Partner public identifier (UUIDv7). Never the internal BIGINT
+            key.
+        slug:
+          type: string
+          title: Slug
+          description: URL-safe partner slug.
+        name:
+          type: string
+          title: Name
+          description: Display name.
+        status:
+          $ref: '#/components/schemas/PartnerStatus'
+          description: Partner lifecycle status.
+        sla_seconds:
+          type: integer
+          title: Sla Seconds
+          description: SLA target in seconds.
+        rate_limit_rps:
+          type: integer
+          title: Rate Limit Rps
+          description: Rate limit in requests per second.
+        auto_replay_enabled:
+          type: boolean
+          title: Auto Replay Enabled
+          description: Scheduled auto-replay flag.
+        circuit_breaker_config:
+          additionalProperties: true
+          type: object
+          title: Circuit Breaker Config
+          description: Circuit breaker configuration.
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Creation timestamp (UTC).
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Last update timestamp (UTC).
+      type: object
+      required:
+      - id
+      - slug
+      - name
+      - status
+      - sla_seconds
+      - rate_limit_rps
+      - auto_replay_enabled
+      - circuit_breaker_config
+      - created_at
+      - updated_at
+      title: PartnerResponse
+      description: Partner details returned by admin GET endpoints (no secrets).
+    PartnerStatus:
+      type: string
+      enum:
+      - active
+      - suspended
+      - provisioning
+      title: PartnerStatus
+    PartnerUpdate:
+      properties:
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/PartnerStatus'
+          - type: 'null'
+          description: Partner lifecycle status.
+        sla_seconds:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Sla Seconds
+          description: Updated SLA target in seconds.
+        rate_limit_rps:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Rate Limit Rps
+          description: Updated rate limit in requests per second.
+        auto_replay_enabled:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Auto Replay Enabled
+          description: Whether scheduled auto-replay is enabled for this partner.
+        circuit_breaker_config:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Circuit Breaker Config
+          description: Circuit breaker configuration JSON object.
+      type: object
+      title: PartnerUpdate
+      description: Body for PATCH /admin/v1/partners/{id}.
+    PayloadSchemaCreate:
+      properties:
+        event_type:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Event Type
+          description: Event type name this schema applies to.
+          examples:
+          - order.created
+        version:
+          type: integer
+          minimum: 1.0
+          title: Version
+          description: Monotonic schema version for the event type.
+        json_schema:
+          additionalProperties: true
+          type: object
+          title: Json Schema
+          description: JSON Schema document (Draft 2020-12).
+      type: object
+      required:
+      - event_type
+      - version
+      - json_schema
+      title: PayloadSchemaCreate
+      description: Body for POST /admin/v1/schemas.
+    PayloadSchemaListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/PayloadSchemaResponse'
+          type: array
+          title: Items
+          description: Matching schema rows.
+        total:
+          type: integer
+          title: Total
+          description: Total number of matching rows.
+      type: object
+      required:
+      - items
+      - total
+      title: PayloadSchemaListResponse
+      description: List of payload schemas for an event type.
+    PayloadSchemaResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Schema registry UUIDv7 identifier.
+        event_type:
+          type: string
+          title: Event Type
+          description: Event type name.
+        version:
+          type: integer
+          title: Version
+          description: Schema version number.
+        json_schema:
+          additionalProperties: true
+          type: object
+          title: Json Schema
+          description: JSON Schema document.
+        status:
+          $ref: '#/components/schemas/PayloadSchemaStatus'
+          description: active or deprecated.
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Row creation timestamp.
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Last update timestamp.
+      type: object
+      required:
+      - id
+      - event_type
+      - version
+      - json_schema
+      - status
+      - created_at
+      - updated_at
+      title: PayloadSchemaResponse
+      description: Registered payload schema row.
+    PayloadSchemaStatus:
+      type: string
+      enum:
+      - active
+      - deprecated
+      title: PayloadSchemaStatus
+    ReplayApprovalActionResponse:
+      properties:
+        delivery_id:
+          type: string
+          format: uuid
+          title: Delivery Id
+          description: Delivery public UUIDv7 identifier.
+        status:
+          $ref: '#/components/schemas/DeliveryStatus'
+          description: Delivery status after replay approval (replaying).
+      type: object
+      required:
+      - delivery_id
+      - status
+      title: ReplayApprovalActionResponse
+      description: Delivery state after an approved replay.
+    ReplayApprovalListItem:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Replay approval public UUIDv7 identifier.
+        delivery_id:
+          type: string
+          format: uuid
+          title: Delivery Id
+          description: Delivery public UUIDv7 identifier.
+        reason:
+          type: string
+          title: Reason
+          description: Operator reason for the replay request.
+        requested_by:
+          type: string
+          title: Requested By
+          description: Operator who requested the replay.
+        approved_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Approved By
+          description: Admin who approved or rejected; null while pending.
+        status:
+          $ref: '#/components/schemas/ReplayApprovalStatus'
+          description: Approval workflow status.
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: When the approval request was created.
+      type: object
+      required:
+      - id
+      - delivery_id
+      - reason
+      - requested_by
+      - status
+      - created_at
+      title: ReplayApprovalListItem
+      description: Single replay approval row for the admin queue.
+    ReplayApprovalPendingResponse:
+      properties:
+        approval_id:
+          type: string
+          format: uuid
+          title: Approval Id
+          description: Replay approval public UUIDv7 identifier.
+        status:
+          $ref: '#/components/schemas/ReplayApprovalStatus'
+          description: Approval workflow status (pending until admin acts).
+      type: object
+      required:
+      - approval_id
+      - status
+      title: ReplayApprovalPendingResponse
+      description: Replay request queued for admin approval.
+    ReplayApprovalRejectRequest:
+      properties:
+        reason:
+          type: string
+          title: Reason
+          description: Required admin reason for rejection audit trail (non-empty).
+          examples:
+          - Duplicate replay request; partner already recovered.
+      type: object
+      required:
+      - reason
+      title: ReplayApprovalRejectRequest
+      description: Body for POST /admin/v1/replay-approvals/{id}/reject.
+    ReplayApprovalRejectedResponse:
+      properties:
+        approval_id:
+          type: string
+          format: uuid
+          title: Approval Id
+          description: Replay approval public UUIDv7 identifier.
+        status:
+          $ref: '#/components/schemas/ReplayApprovalStatus'
+          description: Approval workflow status after rejection.
+      type: object
+      required:
+      - approval_id
+      - status
+      title: ReplayApprovalRejectedResponse
+      description: Replay approval rejection acknowledgement.
+    ReplayApprovalStatus:
+      type: string
+      enum:
+      - pending
+      - approved
+      - rejected
+      title: ReplayApprovalStatus
+    RotateSecretResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Partner public identifier (UUIDv7). Never the internal BIGINT
+            key.
+        slug:
+          type: string
+          title: Slug
+          description: URL-safe partner slug.
+        name:
+          type: string
+          title: Name
+          description: Display name.
+        status:
+          $ref: '#/components/schemas/PartnerStatus'
+          description: Partner lifecycle status.
+        sla_seconds:
+          type: integer
+          title: Sla Seconds
+          description: SLA target in seconds.
+        rate_limit_rps:
+          type: integer
+          title: Rate Limit Rps
+          description: Rate limit in requests per second.
+        auto_replay_enabled:
+          type: boolean
+          title: Auto Replay Enabled
+          description: Scheduled auto-replay flag.
+        circuit_breaker_config:
+          additionalProperties: true
+          type: object
+          title: Circuit Breaker Config
+          description: Circuit breaker configuration.
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          description: Creation timestamp (UTC).
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+          description: Last update timestamp (UTC).
+        signing_secret:
+          type: string
+          title: Signing Secret
+          description: New plaintext HMAC signing secret. Shown only on rotate; store
+            out-of-band.
+          examples:
+          - example-hmac-secret-shown-once
+      type: object
+      required:
+      - id
+      - slug
+      - name
+      - status
+      - sla_seconds
+      - rate_limit_rps
+      - auto_replay_enabled
+      - circuit_breaker_config
+      - created_at
+      - updated_at
+      - signing_secret
+      title: RotateSecretResponse
+      description: Signing secret rotation response — plaintext shown once.
+    SandboxTestDeliveryRequest:
+      properties:
+        partner_id:
+          type: string
+          format: uuid
+          title: Partner Id
+          description: Partner public UUIDv7 identifier.
+        event_type:
+          type: string
+          title: Event Type
+          description: Event type to deliver (e.g. order.created).
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+          description: JSON object payload for the partner webhook.
+        idempotency_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency Key
+          description: 'Optional caller idempotency key; when omitted a unique sandbox::
+            UUID is generated.'
+        correlation_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Correlation Id
+          description: Optional UUIDv7 correlation id; defaults to X-Correlation-Id
+            when omitted.
+      type: object
+      required:
+      - partner_id
+      - event_type
+      - payload
+      title: SandboxTestDeliveryRequest
+      description: Body for POST /admin/v1/deliveries/test.
+    TopFailingPartner:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          description: Partner public UUIDv7 identifier.
+          examples:
+          - 0194a2b3-c4d5-7890-abcd-ef1234567890
+        slug:
+          type: string
+          title: Slug
+          description: Partner slug.
+          examples:
+          - acme-erp
+        success_rate:
+          type: number
+          title: Success Rate
+          description: Delivered / terminal deliveries in the window.
+          examples:
+          - 0.45
+        sla_breaches:
+          type: integer
+          minimum: 0.0
+          title: Sla Breaches
+          description: Terminal deliveries with SLA breach in the window.
+          examples:
+          - 5
+      type: object
+      required:
+      - id
+      - slug
+      - success_rate
+      - sla_breaches
+      title: TopFailingPartner
+      description: Partner ranked by low success rate in the analytics window.
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
+tags:
+- name: inbound
+  description: Partner-facing webhook ingest. HMAC-SHA256 over timestamp and raw body;
+    API key in Authorization.
+- name: admin
+  description: Operator API. Identifiers are UUIDv7 public ids only. Replay requires
+    reason and is audited.
+- name: internal
+  description: Platform services only. Not partner-facing. partner_id is the partner
+    public UUID.
+- name: partner
+  description: Partner read-only APIs for own deliveries only; not admin.
+- name: health
+  description: Liveness and readiness probes.
