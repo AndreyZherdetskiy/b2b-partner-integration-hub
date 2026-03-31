@@ -1,0 +1,92 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "content": "**Idle `rate()` NaN is not an outage.** When counters are flat (no traffic), PromQL `rate()` returns empty/NaN — that is normal, not a hub incident. Poison partner 4xx responses are contract errors, not infrastructure failures.",
+        "mode": "markdown"
+      },
+      "title": "Operator notes",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum by (partner_slug) (rate(hub_deliveries_total[5m]))",
+          "legendFormat": "{{partner_slug}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Delivery throughput (stub)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum by (partner_slug) (rate(hub_delivery_attempts_total{http_status_class=\"5xx\"}[5m])) / sum by (partner_slug) (rate(hub_delivery_attempts_total[5m]))",
+          "legendFormat": "{{partner_slug}} 5xx ratio",
+          "refId": "A"
+        }
+      ],
+      "title": "Partner error rate (stub)",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["hub", "integration"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "Integration Health Overview",
+  "uid": "hub-integration-health",
+  "version": 1
+}
