@@ -1,0 +1,149 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "content": "**Idle `rate()` NaN is not an outage.** When counters are flat (no traffic), PromQL `rate()` returns empty/NaN — that is normal, not a hub incident. A demo 400 (poison) dropping success-rate is taxonomy, not infra.\n\nRunbooks: [`sla-breach-response.md`](docs/runbooks/sla-breach-response.md) · [`dlq-response.md`](docs/runbooks/dlq-response.md)",
+        "mode": "markdown"
+      },
+      "title": "Operator notes",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum by (partner_slug) (rate(hub_deliveries_total{status=\"delivered\"}[5m])) / sum by (partner_slug) (rate(hub_deliveries_total[5m]))",
+          "legendFormat": "{{partner_slug}} success rate",
+          "refId": "A"
+        }
+      ],
+      "title": "Delivery success rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum by (partner_slug) (increase(hub_sla_breaches_total[1h]))",
+          "legendFormat": "{{partner_slug}} breaches",
+          "refId": "A"
+        }
+      ],
+      "title": "SLA breaches (1h)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "max": 2,
+          "min": 0
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "max by (partner_slug) (hub_circuit_breaker_state{state=\"open\"})",
+          "legendFormat": "{{partner_slug}} circuit",
+          "refId": "A"
+        }
+      ],
+      "title": "Circuit breaker open (2=open)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "hub_dlq_oldest_age_seconds",
+          "legendFormat": "oldest DLQ age",
+          "refId": "A"
+        }
+      ],
+      "title": "DLQ oldest age",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["hub", "sla"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "title": "SLA and Compliance",
+  "uid": "hub-sla-compliance",
+  "version": 2
+}
