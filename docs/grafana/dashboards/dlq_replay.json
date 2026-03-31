@@ -1,0 +1,87 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "content": "DLQ alert `HubDLQGrowth` runbook: `docs/runbooks/dlq-response.md`. Idle `rate()` NaN with zero DLQ traffic is expected.",
+        "mode": "markdown"
+      },
+      "title": "DLQ operator notes",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum by (partner_slug) (hub_dlq_backlog)",
+          "legendFormat": "{{partner_slug}} backlog",
+          "refId": "A"
+        }
+      ],
+      "title": "DLQ backlog (stub)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum by (partner_slug) (rate(hub_replay_total[5m]))",
+          "legendFormat": "{{partner_slug}} replays/s",
+          "refId": "A"
+        }
+      ],
+      "title": "Replay rate (stub)",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["hub", "dlq"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "DLQ and Replay",
+  "uid": "hub-dlq-replay",
+  "version": 1
+}
