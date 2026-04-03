@@ -1,0 +1,178 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "content": "Locust `--otel` metrics scraped from the OTel Collector (`job=\"otel-collector\"`, `exported_job=\"locust\"`). Local accept-path smoke only — not spec §8.1 throughput proof.",
+        "mode": "markdown"
+      },
+      "title": "Operator notes",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 4
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "locust_users_count{exported_job=\"locust\"}",
+          "legendFormat": "{{user_class}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Locust users (locust_users_count)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 16,
+        "x": 8,
+        "y": 4
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum by (name) (rate(locust_client_duration_seconds_count{exported_job=\"locust\"}[1m]))",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Locust request rate by endpoint",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (name, le) (rate(locust_client_duration_seconds_bucket{exported_job=\"locust\"}[1m])))",
+          "legendFormat": "p95 {{name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Locust client duration p95 (locust_client_duration_seconds)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "sum by (http_method, http_status_code) (rate(http_client_duration_milliseconds_count{exported_job=\"locust\"}[1m]))",
+          "legendFormat": "{{http_method}} {{http_status_code}}",
+          "refId": "A"
+        }
+      ],
+      "title": "OTEL HTTP client rate (http_client_duration_milliseconds)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (http_method, le) (rate(http_client_duration_milliseconds_bucket{exported_job=\"locust\"}[1m])))",
+          "legendFormat": "p95 {{http_method}}",
+          "refId": "A"
+        }
+      ],
+      "title": "OTEL HTTP client duration p95 (http_client_duration_milliseconds)",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["hub", "locust", "otel", "load"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "title": "Locust OTEL (Collector)",
+  "uid": "hub-locust-otel",
+  "version": 1
+}
