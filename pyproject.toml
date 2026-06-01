@@ -1,0 +1,97 @@
+[project]
+name = "partner-integration-hub"
+version = "0.1.0"
+description = "Partner Integration Hub — B2B webhook delivery"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141,<0.142",
+    "uvicorn[standard]>=0.52,<0.53",
+    "pydantic>=2.8,<3",
+    "pydantic-settings>=2.6,<3",
+    "structlog>=26,<27",
+    "opentelemetry-api>=1.44,<2",
+    "opentelemetry-sdk>=1.44,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
+    "sqlalchemy[asyncio]>=2.0,<2.1",
+    "asyncpg>=0.31,<0.32",
+    "alembic>=1.13,<2",
+    "uuid6>=2025,<2026",
+    "cryptography>=50,<51",
+    "argon2-cffi>=25,<26",
+    "pyjwt>=2.8,<3",
+    "redis[hiredis]>=8.1,<9",
+    "aiokafka>=0.14,<0.15",
+    "httpx>=0.28,<0.29",
+    "opentelemetry-instrumentation-fastapi>=0.65b0,<0.66",
+    "opentelemetry-instrumentation-httpx>=0.65b0,<0.66",
+    "opentelemetry-instrumentation-asgi>=0.65b0,<0.66",
+    # celery[redis] → kombu[redis] pins redis<6.5; incompatible with redis-py 8.1.
+    # Install redis separately (same pattern as billing / support_rag). Broker still Redis.
+    "celery>=5.6,<5.7",
+    "jsonschema>=4.23,<5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<9",
+    "pytest-asyncio>=0.23,<1",
+    "ruff>=0.5,<0.6",
+    "mypy>=1.10,<2",
+    "pyyaml>=6,<7",
+    "pre-commit>=4,<5",
+]
+load = [
+    "locust[otel]>=2.32,<3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app", "partner_mock", "celery_app"]
+
+[tool.uv]
+# Local/CI interpreter is 3.12 (spec floor). Pin via `.python-version`.
+
+[tool.ruff]
+line-length = 99
+target-version = "py312"
+src = ["app", "partner_mock", "celery_app", "loadtests", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+packages = ["app", "partner_mock", "celery_app"]
+
+[[tool.mypy.overrides]]
+module = [
+    "aiokafka",
+    "aiokafka.*",
+    "celery",
+    "celery.*",
+    "kombu",
+    "kombu.*",
+    "jsonschema",
+    "jsonschema.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib --strict-markers"
+pythonpath = ["."]
+asyncio_mode = "auto"
+markers = [
+    "e2e: optional live smoke against running compose hub-api",
+    "integration: integration tests requiring docker compose stack",
+    "stage2: Stage 2 scenarios not required for Stage 1 acceptance",
+]
