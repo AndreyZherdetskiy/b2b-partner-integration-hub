@@ -1,0 +1,8 @@
+.venv
+.git
+.docs_ru
+.superpowers
+admin_ui/node_modules
+__pycache__
+.env
+*.pyc
