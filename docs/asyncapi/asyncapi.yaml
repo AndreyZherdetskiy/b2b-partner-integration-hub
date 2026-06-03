@@ -1,0 +1,405 @@
+asyncapi: 3.0.0
+info:
+  title: Partner Integration Hub Kafka Contracts
+  version: 0.1.0
+  description: |
+    Kafka topic contracts for Partner Integration Hub (Stage 1 flows and Stage 2 retry tiers).
+    Payload public identifiers are UUID strings
+    (`delivery_id`, `partner_id`, `event_id`, `endpoint_id`) — never internal BIGINT keys.
+    Message key is the partner `public_id` (UUID string) for per-partner ordering affinity.
+servers:
+  kafka:
+    host: kafka:9092
+    protocol: kafka
+    description: Local Compose Kafka broker
+
+channels:
+  outboundPending:
+    address: hub.outbound.pending
+    description: Outbound delivery ready for first HTTP attempt.
+    messages:
+      outboundPending:
+        $ref: "#/components/messages/OutboundPending"
+    bindings:
+      kafka:
+        bindingVersion: "0.5.0"
+
+  outboundRetry30s:
+    address: hub.outbound.retry.30s
+    description: Outbound delivery scheduled for retry after ~30s backoff tier (attempt 2).
+    messages:
+      outboundRetry:
+        $ref: "#/components/messages/OutboundPending"
+    bindings:
+      kafka:
+        bindingVersion: "0.5.0"
+
+  outboundRetry1m:
+    address: hub.outbound.retry.1m
+    description: Outbound delivery scheduled for retry after ~1m backoff tier.
+    messages:
+      outboundRetry:
+        $ref: "#/components/messages/OutboundPending"
+    bindings:
+      kafka:
+        bindingVersion: "0.5.0"
+
+  outboundRetry5m:
+    address: hub.outbound.retry.5m
+    description: Outbound delivery scheduled for retry after ~1–5m backoff tier (attempts 3–4).
+    messages:
+      outboundRetry:
+        $ref: "#/components/messages/OutboundPending"
+    bindings:
+      kafka:
+        bindingVersion: "0.5.0"
+
+  outboundRetry15m:
+    address: hub.outbound.retry.15m
+    description: Outbound delivery scheduled for retry after ~15m backoff tier (attempts 5–6).
+    messages:
+      outboundRetry:
+        $ref: "#/components/messages/OutboundPending"
+    bindings:
+      kafka:
+        bindingVersion: "0.5.0"
+
+  outboundRetry1h:
+    address: hub.outbound.retry.1h
+    description: Outbound delivery scheduled for retry after ~1h backoff tier (attempts 7–8).
+    messages:
+      outboundRetry:
+        $ref: "#/components/messages/OutboundPending"
+    bindings:
+      kafka:
+        bindingVersion: "0.5.0"
+
+  outboundDlq:
+    address: hub.outbound.dlq
+    description: Poison or terminal-failure outbound delivery.
+    messages:
+      outboundDlq:
+        $ref: "#/components/messages/OutboundDlq"
+    bindings:
+      kafka:
+        bindingVersion: "0.5.0"
+
+  inboundOrderCreated:
+    address: hub.inbound.order.created
+    description: Normalized inbound order.created event.
+    messages:
+      inboundEvent:
+        $ref: "#/components/messages/InboundEvent"
+    bindings:
+      kafka:
+        bindingVersion: "0.5.0"
+
+  inboundOrderUpdated:
+    address: hub.inbound.order.updated
+    description: Normalized inbound order.updated event.
+    messages:
+      inboundEvent:
+        $ref: "#/components/messages/InboundEvent"
+    bindings:
+      kafka:
+        bindingVersion: "0.5.0"
+
+  integrationSlaBreached:
+    address: hub.integration.sla_breached
+    description: Delivery SLA deadline breached notification.
+    messages:
+      slaBreached:
+        $ref: "#/components/messages/SlaBreached"
+    bindings:
+      kafka:
+        bindingVersion: "0.5.0"
+
+operations:
+  publishOutboundPending:
+    action: send
+    channel:
+      $ref: "#/channels/outboundPending"
+  publishOutboundRetry30s:
+    action: send
+    channel:
+      $ref: "#/channels/outboundRetry30s"
+  publishOutboundRetry1m:
+    action: send
+    channel:
+      $ref: "#/channels/outboundRetry1m"
+  publishOutboundRetry5m:
+    action: send
+    channel:
+      $ref: "#/channels/outboundRetry5m"
+  publishOutboundRetry15m:
+    action: send
+    channel:
+      $ref: "#/channels/outboundRetry15m"
+  publishOutboundRetry1h:
+    action: send
+    channel:
+      $ref: "#/channels/outboundRetry1h"
+  publishOutboundDlq:
+    action: send
+    channel:
+      $ref: "#/channels/outboundDlq"
+  publishInboundOrderCreated:
+    action: send
+    channel:
+      $ref: "#/channels/inboundOrderCreated"
+  publishInboundOrderUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/inboundOrderUpdated"
+  publishSlaBreached:
+    action: send
+    channel:
+      $ref: "#/channels/integrationSlaBreached"
+
+components:
+  messages:
+    OutboundPending:
+      name: OutboundPending
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+          delivery_id:
+            type: string
+            format: uuid
+          event_type:
+            type: string
+          attempt:
+            type: string
+          content-type:
+            type: string
+      payload:
+        $ref: "#/components/schemas/OutboundPendingPayload"
+      bindings:
+        kafka:
+          bindingVersion: "0.5.0"
+          key:
+            type: string
+            format: uuid
+            description: Kafka message key = partner public_id (UUID string).
+    OutboundDlq:
+      name: OutboundDlq
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+          delivery_id:
+            type: string
+            format: uuid
+          event_type:
+            type: string
+          attempt:
+            type: string
+          content-type:
+            type: string
+      payload:
+        $ref: "#/components/schemas/OutboundDlqPayload"
+      bindings:
+        kafka:
+          bindingVersion: "0.5.0"
+          key:
+            type: string
+            format: uuid
+            description: Kafka message key = partner public_id (UUID string).
+    InboundEvent:
+      name: InboundEvent
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+          event_type:
+            type: string
+          content-type:
+            type: string
+      payload:
+        $ref: "#/components/schemas/InboundEventPayload"
+      bindings:
+        kafka:
+          bindingVersion: "0.5.0"
+          key:
+            type: string
+            format: uuid
+            description: Kafka message key = partner public_id (UUID string).
+    SlaBreached:
+      name: SlaBreached
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+          delivery_id:
+            type: string
+            format: uuid
+          event_type:
+            type: string
+          content-type:
+            type: string
+      payload:
+        $ref: "#/components/schemas/SlaBreachedPayload"
+      bindings:
+        kafka:
+          bindingVersion: "0.5.0"
+          key:
+            type: string
+            format: uuid
+            description: Kafka message key = partner public_id (UUID string).
+
+  schemas:
+    SchemaVersion:
+      type: integer
+      const: 1
+      description: Envelope schema version; bump only with breaking payload changes.
+
+    OutboundPendingPayload:
+      type: object
+      required:
+        - schema_version
+        - delivery_id
+        - partner_id
+        - endpoint_id
+        - event_type
+        - attempt
+        - payload
+        - idempotency_key
+        - correlation_id
+        - scheduled_at
+        - sla_deadline_at
+      properties:
+        schema_version:
+          $ref: "#/components/schemas/SchemaVersion"
+        delivery_id:
+          type: string
+          format: uuid
+          description: deliveries.public_id (UUIDv7)
+        partner_id:
+          type: string
+          format: uuid
+          description: partners.public_id (UUIDv7)
+        endpoint_id:
+          type: string
+          format: uuid
+          description: partner_endpoints.public_id (UUIDv7)
+        event_type:
+          type: string
+        attempt:
+          type: integer
+          minimum: 1
+        idempotency_key:
+          type: string
+        correlation_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        scheduled_at:
+          type: string
+          format: date-time
+        sla_deadline_at:
+          type: string
+          format: date-time
+
+    OutboundDlqPayload:
+      type: object
+      required:
+        - schema_version
+        - delivery_id
+        - partner_id
+        - endpoint_id
+        - event_type
+        - attempt
+        - reason
+        - correlation_id
+      properties:
+        schema_version:
+          $ref: "#/components/schemas/SchemaVersion"
+        delivery_id:
+          type: string
+          format: uuid
+        partner_id:
+          type: string
+          format: uuid
+        endpoint_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        attempt:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+        correlation_id:
+          type: string
+
+    InboundEventPayload:
+      type: object
+      required:
+        - schema_version
+        - event_id
+        - partner_id
+        - event_type
+        - payload
+        - idempotency_key
+        - correlation_id
+        - received_at
+      properties:
+        schema_version:
+          $ref: "#/components/schemas/SchemaVersion"
+        event_id:
+          type: string
+          format: uuid
+          description: inbound_events.public_id (UUIDv7)
+        partner_id:
+          type: string
+          format: uuid
+          description: partners.public_id (UUIDv7)
+        event_type:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        idempotency_key:
+          type: string
+        correlation_id:
+          type: string
+        received_at:
+          type: string
+          format: date-time
+
+    SlaBreachedPayload:
+      type: object
+      required:
+        - schema_version
+        - delivery_id
+        - partner_id
+        - event_type
+        - correlation_id
+        - sla_deadline_at
+      properties:
+        schema_version:
+          $ref: "#/components/schemas/SchemaVersion"
+        delivery_id:
+          type: string
+          format: uuid
+        partner_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        correlation_id:
+          type: string
+        sla_deadline_at:
+          type: string
+          format: date-time
