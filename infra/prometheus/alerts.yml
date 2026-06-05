@@ -1,0 +1,50 @@
+groups:
+  - name: hub_alerts
+    rules:
+      - alert: HubDLQGrowth
+        expr: sum(rate(hub_dlq_messages_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: DLQ message rate elevated
+          description: >
+            rate(hub_dlq_messages_total[5m]) is above threshold. Classify poison
+            (4xx) vs partner outage (5xx/timeout) before replay.
+          runbook_url: docs/runbooks/dlq-response.md
+
+      - alert: HubDLQAge
+        expr: hub_dlq_oldest_age_seconds > 3600
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: DLQ oldest message exceeds age threshold
+          description: >
+            hub_dlq_oldest_age_seconds is above 3600s for 5m. Classify poison vs
+            partner outage; check circuit breaker before replay.
+          runbook_url: docs/runbooks/dlq-response.md
+
+      - alert: HubComplianceDrop
+        expr: avg by (partner_slug) (hub_sla_compliance_ratio) < 0.98
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: SLA compliance below 98% for partner
+          description: >
+            hub_sla_compliance_ratio dropped below 0.98 for 1h. The for: window
+            avoids firing on a single demo 400 (poison taxonomy). Prepare SLA facts.
+          runbook_url: docs/runbooks/sla-breach-response.md
+
+      - alert: HubCircuitOpen
+        expr: max by (partner_slug) (hub_circuit_breaker_state{state="open"}) == 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Circuit breaker open for partner
+          description: >
+            hub_circuit_breaker_state is open (2) for 5m. Outbound POSTs are
+            paused; pause bulk-replay until partner recovery.
+          runbook_url: docs/runbooks/circuit-breaker.md
