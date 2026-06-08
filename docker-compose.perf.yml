@@ -1,0 +1,21 @@
+# Characterization overlay only. Not default stack-up. Not spec §8.1 proof.
+services:
+  hub-api:
+    command:
+      [
+        "uvicorn",
+        "app.main:create_app",
+        "--factory",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--workers",
+        "4",
+      ]
+    environment:
+      OTEL_SDK_DISABLED: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
