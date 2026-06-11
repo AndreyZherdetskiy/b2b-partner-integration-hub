@@ -1,0 +1,5 @@
+# Integration test overlay — reuses the Stage 1 data plane from docker-compose.yml.
+# Usage: docker compose -p b2b-partner-integration-hub -f docker-compose.yml -f docker-compose.test.yml up -d
+# Full CI wiring lands in Makefile test-integration (later tasks).
+include:
+  - docker-compose.yml
