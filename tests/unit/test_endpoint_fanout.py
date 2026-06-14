@@ -37,7 +37,7 @@ from app.domain.services.delivery_service import derived_idempotency_key
 from app.main import create_app
 
 FIXED_NOW = 1_720_000_000
-ADMIN_TOKEN = "test-admin-bootstrap-token"
+ADMIN_TOKEN = "test-admin-bootstrap-token-at-least-32-bytes"
 EVENT_TYPE = "order.created"
 CLIENT_IDEM_KEY = "fanout-idem-1"
 

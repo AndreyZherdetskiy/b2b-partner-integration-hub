@@ -90,6 +90,15 @@ class Settings(BaseSettings):
             return False
         return value
 
+    @field_validator("admin_bootstrap_token")
+    @classmethod
+    def hmac_secret_min_length(cls, value: str) -> str:
+        if value and len(value.encode("utf-8")) < 32:
+            raise ValueError(
+                "ADMIN_BOOTSTRAP_TOKEN must be at least 32 bytes for HS256 (RFC 7518 §3.2)"
+            )
+        return value
+
 
 @lru_cache
 def get_settings() -> Settings:

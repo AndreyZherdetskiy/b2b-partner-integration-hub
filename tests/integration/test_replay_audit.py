@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from tests.integration.conftest import auth_header
+from tests.integration.conftest import INTEGRATION_ADMIN_TOKEN, auth_header
 
 from app.domain.enums import DeliveryDirection, DeliveryStatus, EndpointDirection, EndpointStatus
 from app.domain.ids import generate_uuidv7
@@ -24,7 +24,7 @@ from app.domain.services.secrets import encrypt_signing_secret
 pytestmark = pytest.mark.integration
 
 
-def _operator_token(secret: str = "hub_admin") -> str:
+def _operator_token(secret: str = INTEGRATION_ADMIN_TOKEN) -> str:
     return jwt.encode({"sub": "operator-1", "role": "hub_operator"}, secret, algorithm="HS256")
 
 

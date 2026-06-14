@@ -21,7 +21,7 @@ from app.domain.models.endpoint import PartnerEndpoint
 from app.domain.models.partner import Partner
 from app.main import create_app
 
-ADMIN_TOKEN = "test-admin-bootstrap-token"
+ADMIN_TOKEN = "test-admin-bootstrap-token-at-least-32-bytes"
 EVENT_TYPE = "order.created"
 
 

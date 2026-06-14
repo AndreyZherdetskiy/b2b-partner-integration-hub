@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from aiokafka import AIOKafkaConsumer
 from fastapi.testclient import TestClient
-from tests.integration.conftest import auth_header
+from tests.integration.conftest import INTEGRATION_ADMIN_TOKEN, auth_header
 
 from app.domain.services.hmac_service import sign
 
@@ -23,19 +23,19 @@ TOPIC = "hub.inbound.order.created"
 def _seed_partner(client: TestClient) -> tuple[dict[str, Any], str, str]:
     created = client.post(
         "/admin/v1/partners",
-        headers=auth_header("hub_admin"),
+        headers=auth_header(INTEGRATION_ADMIN_TOKEN),
         json={"slug": "inbound-idem", "name": "Inbound Idem", "sla_seconds": 60},
     )
     assert created.status_code == 201, created.text
     partner = created.json()
     client.patch(
         f"/admin/v1/partners/{partner['id']}",
-        headers=auth_header("hub_admin"),
+        headers=auth_header(INTEGRATION_ADMIN_TOKEN),
         json={"status": "active"},
     )
     key_res = client.post(
         f"/admin/v1/partners/{partner['id']}/api-keys",
-        headers=auth_header("hub_admin"),
+        headers=auth_header(INTEGRATION_ADMIN_TOKEN),
         json={"scopes": ["inbound:write"]},
     )
     assert key_res.status_code == 201, key_res.text

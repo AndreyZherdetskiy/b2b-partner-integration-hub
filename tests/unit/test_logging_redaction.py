@@ -30,7 +30,7 @@ def _capture_json_log(**event_fields: object) -> dict[str, object]:
     root.addHandler(handler)
     root.setLevel(logging.INFO)
 
-    settings = Settings(_env_file=None, log_level="INFO")
+    settings = Settings(_env_file=None, log_level="INFO", otel_service_name="hub-api")
     configure_logging(settings)
 
     log = structlog.get_logger("test")

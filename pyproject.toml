@@ -95,3 +95,6 @@ markers = [
     "integration: integration tests requiring docker compose stack",
     "stage2: Stage 2 scenarios not required for Stage 1 acceptance",
 ]
+filterwarnings = [
+    "error::jwt.warnings.InsecureKeyLengthWarning",
+]

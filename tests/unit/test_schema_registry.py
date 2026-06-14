@@ -38,7 +38,7 @@ from app.domain.services.secrets import encrypt_signing_secret
 from app.main import create_app
 
 FIXED_NOW = 1_720_000_000
-ADMIN_TOKEN = "test-admin-bootstrap-token"
+ADMIN_TOKEN = "test-admin-bootstrap-token-at-least-32-bytes"
 SIGNING_SECRET = "whsec_schema_test_secret"
 PARTNER_SLUG = "acme-schema"
 EVENT_TYPE = "order.created"

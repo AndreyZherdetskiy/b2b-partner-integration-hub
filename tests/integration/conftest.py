@@ -17,6 +17,7 @@ from app.main import create_app
 DATABASE_URL = "postgresql+asyncpg://hub:hub@localhost:5432/hub"
 REDIS_URL = "redis://localhost:6379/0"
 KAFKA_BOOTSTRAP = "localhost:9092"
+INTEGRATION_ADMIN_TOKEN = "test-admin-bootstrap-token-at-least-32-bytes"
 
 
 @pytest.fixture(scope="session")
@@ -26,7 +27,7 @@ def fernet_key() -> str:
 
 @pytest.fixture(scope="session")
 def admin_token() -> str:
-    return "hub_admin"
+    return INTEGRATION_ADMIN_TOKEN
 
 
 @pytest.fixture(scope="session")
