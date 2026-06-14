@@ -13,6 +13,13 @@ x-hub-runtime-env: &hub-runtime-env
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
 
+x-hub-process-healthcheck: &hub-process-healthcheck
+  test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 15s
+
 services:
   postgres:
     image: postgres:16.15
@@ -139,7 +146,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["NONE"]
+      test: ["CMD", "/redis-commander/bin/healthcheck.js"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
     logging:
       driver: json-file
@@ -157,7 +168,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["NONE"]
+      test: ["CMD", "php", "-r", "exit(is_readable('/proc/1/status') ? 0 : 1);"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     logging:
       driver: json-file
@@ -190,7 +205,6 @@ services:
     ports:
       - "4317:4317"
       - "4318:4318"
-    # Distroless image has no wget; busybox is copied in infra/otel/Dockerfile.
     healthcheck:
       test:
         [
@@ -398,9 +412,7 @@ services:
       otel-collector:
         condition: service_started
     stop_grace_period: 30s
-    # Override image :8000 HEALTHCHECK; disable:true breaks `compose up --wait`.
-    healthcheck:
-      test: ["NONE"]
+    healthcheck: *hub-process-healthcheck
     read_only: true
     tmpfs:
       - /tmp
@@ -437,8 +449,7 @@ services:
       otel-collector:
         condition: service_started
     stop_grace_period: 30s
-    healthcheck:
-      test: ["NONE"]
+    healthcheck: *hub-process-healthcheck
     read_only: true
     tmpfs:
       - /tmp
@@ -475,8 +486,7 @@ services:
       otel-collector:
         condition: service_started
     stop_grace_period: 30s
-    healthcheck:
-      test: ["NONE"]
+    healthcheck: *hub-process-healthcheck
     read_only: true
     tmpfs:
       - /tmp
@@ -524,8 +534,7 @@ services:
       otel-collector:
         condition: service_started
     stop_grace_period: 30s
-    healthcheck:
-      test: ["NONE"]
+    healthcheck: *hub-process-healthcheck
     read_only: true
     tmpfs:
       - /tmp
@@ -551,7 +560,17 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["NONE"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5555/')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
     logging:
       driver: json-file
