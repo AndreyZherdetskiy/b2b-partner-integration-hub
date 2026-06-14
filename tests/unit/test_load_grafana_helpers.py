@@ -20,6 +20,10 @@ def test_load_smoke_otel_is_opt_in() -> None:
     assert "OTEL_EXPORTER_OTLP_PROTOCOL" in text
     assert "http/protobuf" in text
     assert "http://127.0.0.1:4318" in text
+    assert "OTEL_LOGS_EXPORTER=none" in text
+    collector = (ROOT / "infra" / "otel" / "collector.yaml").read_text(encoding="utf-8")
+    assert "exporters: [nop]" in collector
+    assert "logs:" in collector
     assert "docker network inspect" in text
     assert "b2b-partner-integration-hub" in text
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
