@@ -32,11 +32,22 @@ def test_load_locust_smoke_job() -> None:
     assert "timeout-minutes:" in smoke
     assert "cp .env.example .env" in smoke
     assert "make stack-up" in smoke
+    assert "make seed" in smoke
+    assert smoke.index("make seed") < smoke.index("make load-locust")
     assert "make load-locust" in smoke
     assert "if: always()" in smoke
     assert "make stack-down" in smoke
     assert "LOAD_LOCUST_OTEL=1" not in smoke
     assert "make load-k6" not in smoke
+
+
+def test_workflow_uses_node24_actions() -> None:
+    assert "actions/checkout@v6" in WORKFLOW
+    assert "astral-sh/setup-uv@v7" in WORKFLOW
+    assert "actions/setup-node@v6" in WORKFLOW
+    assert "actions/checkout@v4" not in WORKFLOW
+    assert "setup-uv@v4" not in WORKFLOW
+    assert "setup-node@v4" not in WORKFLOW
 
 
 def test_makefile_load_harness() -> None:

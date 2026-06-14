@@ -4,7 +4,7 @@ Operator guide for **local** HTTP load smoke against the full Docker Compose sta
 
 ## CI and pre-commit (Wave 3)
 
-GitHub Actions (`.github/workflows/ci.yml`) adds sibling jobs `load-harness` (`make load-harness` — load group pytest + Locust `--list`, **no** stack) and `load-locust-smoke` (`cp .env.example .env`, `make stack-up`, `make load-locust`, always `make stack-down`; default smoke **without** `LOAD_LOCUST_OTEL=1`).
+GitHub Actions (`.github/workflows/ci.yml`) adds sibling jobs `load-harness` (`make load-harness` — load group pytest + Locust `--list`, **no** stack) and `load-locust-smoke` (`cp .env.example .env`, `make stack-up`, `make seed`, `make load-locust`, always `make stack-down`; default smoke **without** `LOAD_LOCUST_OTEL=1`).
 
 Pre-commit (`.pre-commit-config.yaml`) adds Ruff **0.5.7**, standard file hooks, and a **local** `import loadtests.locustfile` check — **no Docker** in hooks. Install: `uv run pre-commit install` ([`CONTRIBUTING.md`](../../CONTRIBUTING.md)). On a fresh/untracked repo, `pre-commit run --all-files` only sees `git ls-files`; use `pre-commit run --files <paths>` for local proof.
 

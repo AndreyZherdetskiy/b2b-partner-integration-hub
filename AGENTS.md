@@ -71,7 +71,7 @@ Do not duplicate full ADR/runbook/prompt text here — only **navigation, invari
 - **FORBIDDEN** without explicit human command: `git push`, `gh pr create` / remote mutations, deploy to staging/production, publishing images to a registry, live Keycloak-as-IdP, live Stripe.
 - Commits — only when the human asks. Working tree may stay dirty.
 - **NEVER** update git config; **NEVER** skip hooks (`--no-verify`) unless the human explicitly asks.
-- CI (GitHub Actions): `make ci` — ruff, mypy, unit tests; sibling jobs `load-harness` (`make load-harness`: load group pytest + Locust `--list`, no stack) and `load-locust-smoke` (`cp .env.example .env`, `make stack-up`, `make load-locust`, always `make stack-down`; default smoke **without** `LOAD_LOCUST_OTEL=1`). Integration via `docker-compose.test.yml` / Makefile. Pre-commit: [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- CI (GitHub Actions): `make ci` — ruff, mypy, unit tests; sibling jobs `load-harness` (`make load-harness`: load group pytest + Locust `--list`, no stack) and `load-locust-smoke` (`cp .env.example .env`, `make stack-up`, `make seed`, `make load-locust`, always `make stack-down`; default smoke **without** `LOAD_LOCUST_OTEL=1`). Integration via `docker-compose.test.yml` / Makefile. Pre-commit: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - Subagents: Cursor built-in models only (`composer-2.5`, `cursor-grok-4.5-high`; never BYOK; never `*-fast`); Implementer ≠ Reviewer.
 
 ### 1.1 Frozen host ports
