@@ -62,6 +62,16 @@ MIGRATE_DEPENDENTS = (
     "hub-celery-beat",
 )
 
+WAIT_RUNNING_HEALTHCHECK_NONE = (
+    "redis-commander",
+    "adminer",
+    "hub-outbound-worker",
+    "hub-outbox-relay",
+    "hub-celery-worker",
+    "hub-celery-beat",
+    "flower",
+)
+
 BAKED_CONFIG_SERVICES = (
     "kafka-init",
     "otel-collector",
@@ -281,6 +291,22 @@ def test_hub_migrate_completes_before_app_services(services: dict[str, Any]) -> 
         assert dep.get("condition") == "service_completed_successfully"
 
 
-def test_hub_outbound_worker_disables_api_healthcheck(services: dict[str, Any]) -> None:
-    healthcheck = services["hub-outbound-worker"].get("healthcheck") or {}
-    assert healthcheck.get("disable") is True
+@pytest.mark.parametrize("name", WAIT_RUNNING_HEALTHCHECK_NONE)
+def test_long_running_services_override_healthcheck_with_none(
+    services: dict[str, Any], name: str
+) -> None:
+    """`compose up --wait` errors on healthcheck.disable for running containers."""
+    healthcheck = services[name].get("healthcheck") or {}
+    assert healthcheck.get("test") == ["NONE"]
+    assert healthcheck.get("disable") is not True
+
+
+def test_otel_collector_probes_health_check_extension(services: dict[str, Any]) -> None:
+    dockerfile = Path("infra/otel/Dockerfile").read_text(encoding="utf-8")
+    assert "COPY --from=busybox" in dockerfile
+    assert "/bin/busybox" in dockerfile
+    healthcheck = services["otel-collector"].get("healthcheck") or {}
+    test = " ".join(str(part) for part in (healthcheck.get("test") or []))
+    assert "/bin/busybox" in test
+    assert "13133" in test
+    assert healthcheck.get("disable") is not True

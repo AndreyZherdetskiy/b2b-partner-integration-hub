@@ -139,7 +139,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      disable: true
+      test: ["NONE"]
     restart: unless-stopped
     logging:
       driver: json-file
@@ -157,7 +157,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      disable: true
+      test: ["NONE"]
     restart: unless-stopped
     logging:
       driver: json-file
@@ -190,9 +190,22 @@ services:
     ports:
       - "4317:4317"
       - "4318:4318"
-    # Distroless image inherits wget HEALTHCHECK — disable; probe via OTLP :4318 instead.
+    # Distroless image has no wget; busybox is copied in infra/otel/Dockerfile.
     healthcheck:
-      disable: true
+      test:
+        [
+          "CMD",
+          "/bin/busybox",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:13133/",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
     depends_on:
       jaeger:
         condition: service_healthy
@@ -385,8 +398,9 @@ services:
       otel-collector:
         condition: service_started
     stop_grace_period: 30s
+    # Override image :8000 HEALTHCHECK; disable:true breaks `compose up --wait`.
     healthcheck:
-      disable: true
+      test: ["NONE"]
     read_only: true
     tmpfs:
       - /tmp
@@ -424,7 +438,7 @@ services:
         condition: service_started
     stop_grace_period: 30s
     healthcheck:
-      disable: true
+      test: ["NONE"]
     read_only: true
     tmpfs:
       - /tmp
@@ -462,7 +476,7 @@ services:
         condition: service_started
     stop_grace_period: 30s
     healthcheck:
-      disable: true
+      test: ["NONE"]
     read_only: true
     tmpfs:
       - /tmp
@@ -511,7 +525,7 @@ services:
         condition: service_started
     stop_grace_period: 30s
     healthcheck:
-      disable: true
+      test: ["NONE"]
     read_only: true
     tmpfs:
       - /tmp
@@ -537,7 +551,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      disable: true
+      test: ["NONE"]
     restart: unless-stopped
     logging:
       driver: json-file
