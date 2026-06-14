@@ -51,3 +51,20 @@ def test_create_app_serves_health_when_sdk_disabled() -> None:
         response = client.get("/inbound/v1/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_cors_allows_local_admin_ui_origins() -> None:
+    shutdown_otel()
+    get_settings.cache_clear()
+    with patch.dict(os.environ, {"OTEL_SDK_DISABLED": "true"}, clear=False):
+        get_settings.cache_clear()
+        client = TestClient(create_app())
+        for origin in ("http://localhost:8080", "http://127.0.0.1:8080"):
+            response = client.options(
+                "/inbound/v1/health",
+                headers={
+                    "Origin": origin,
+                    "Access-Control-Request-Method": "GET",
+                },
+            )
+            assert response.headers.get("access-control-allow-origin") == origin

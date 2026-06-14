@@ -3,7 +3,7 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci
 
 COPY . .
 RUN npm run build
@@ -13,7 +13,9 @@ FROM nginx:alpine
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
-RUN mkdir -p /var/cache/nginx /var/log/nginx /tmp \
+RUN rm -f /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh \
+        /etc/nginx/conf.d/default.conf \
+    && mkdir -p /var/cache/nginx /var/log/nginx /tmp \
     && chown -R nginx:nginx /var/cache/nginx /var/log/nginx /tmp /usr/share/nginx/html \
     && chmod -R 755 /var/cache/nginx /var/log/nginx /tmp
 

@@ -6,9 +6,15 @@ export default defineConfig({
   server: {
     port: 8080,
     strictPort: true,
+    proxy: {
+      "/admin": "http://127.0.0.1:8000",
+    },
   },
   preview: {
     port: 8080,
     strictPort: true,
+    proxy: {
+      "/admin": "http://127.0.0.1:8000",
+    },
   },
 });
