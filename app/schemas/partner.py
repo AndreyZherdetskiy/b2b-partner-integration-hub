@@ -127,7 +127,7 @@ class RotateSecretResponse(PartnerResponse):
     signing_secret: str = Field(
         ...,
         description="New plaintext HMAC signing secret. Shown only on rotate; store out-of-band.",
-        examples=["whsec_R0tAt3dS3cr3tPlaintextOnce"],
+        examples=["example-hmac-secret-shown-once"],
     )
 
 

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from app.main import create_app
+
+ROOT = Path(__file__).resolve().parents[2]
 
 SKIP_SCHEMA = {"ValidationError", "HTTPValidationError"}
 _HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
@@ -137,3 +140,21 @@ def test_no_sequential_id_on_partner_delivery_schemas() -> None:
                 assert t != "integer", f"{key}.id must not be integer BIGINT"
                 if t == "string":
                     assert fmt in {"uuid", None} or "uuid" in str(props["id"]).lower()
+
+
+def test_openapi_snapshot_avoids_stripe_webhook_secret_pattern() -> None:
+    """Committed OpenAPI must not include `whsec_` tokens (GitHub Stripe detector)."""
+    for relative in ("docs/openapi/openapi.yaml", "docs/openapi/openapi.json"):
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        assert "whsec_" not in text, relative
+
+
+def test_rotate_secret_schema_example_is_not_stripe_webhook_secret() -> None:
+    spec = create_app().openapi()
+    examples = (
+        spec["components"]["schemas"]["RotateSecretResponse"]["properties"]["signing_secret"].get(
+            "examples"
+        )
+        or []
+    )
+    assert "whsec_" not in json.dumps(examples)
