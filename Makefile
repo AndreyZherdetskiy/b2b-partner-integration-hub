@@ -114,13 +114,13 @@ load-k6-grafana:
 	./scripts/load_k6_grafana.sh
 
 # k6 POST→202 on /internal/v1/outbound/events; requires K6_PARTNER_PUBLIC_ID.
+# Stdin script (same as scripts/load_k6_grafana.sh) — WSL Docker bind-mounts of load/k6 often miss the file.
 load-k6:
 	@test -n "$(K6_PARTNER_PUBLIC_ID)" || (echo "Set K6_PARTNER_PUBLIC_ID (partner public_id from seed)" && exit 1)
-	docker run --rm --network host \
-	  -v "$(CURDIR)/load/k6:/scripts:ro" \
+	docker run --rm -i --network host \
 	  -e BASE="$(or $(BASE),http://127.0.0.1:8000)" \
 	  -e ADMIN_TOKEN="$(or $(ADMIN_TOKEN),$(ADMIN_BOOTSTRAP_TOKEN))" \
 	  -e K6_PARTNER_PUBLIC_ID="$(K6_PARTNER_PUBLIC_ID)" \
 	  -e K6_VUS="$(K6_VUS)" \
 	  -e K6_DURATION="$(K6_DURATION)" \
-	  grafana/k6 run /scripts/outbound_ingest.js
+	  grafana/k6 run - < load/k6/outbound_ingest.js

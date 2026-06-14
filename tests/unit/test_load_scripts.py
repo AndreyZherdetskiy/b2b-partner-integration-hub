@@ -21,6 +21,12 @@ def test_makefile_load_locust_targets() -> None:
     assert "down -v" not in makefile
 
 
+def test_makefile_load_k6_uses_stdin() -> None:
+    makefile = _read("Makefile")
+    assert "grafana/k6 run - < load/k6/outbound_ingest.js" in makefile
+    assert "/scripts:ro" not in makefile
+
+
 def test_load_smoke_script_flags() -> None:
     script = _read("scripts/load_smoke.sh")
     assert "--headless" in script

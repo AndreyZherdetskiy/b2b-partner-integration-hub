@@ -10,7 +10,7 @@
 
 ## Prerequisites
 
-1. Stack up with API: `make compose-up` (full Compose project `b2b_partner_integration_hub`) or run API locally against Postgres/Redis/Kafka.
+1. Stack up with API: `make compose-up` (full Compose project `b2b-partner-integration-hub`) or run API locally against Postgres/Redis/Kafka.
 2. Seed data: `make migrate && make seed`.
 3. Partner `public_id` for an active partner with an outbound endpoint subscribed to `order.created` (canonical seed: `acme-erp`). Obtain via Admin API or seed script output.
 4. Admin token: same value as `ADMIN_BOOTSTRAP_TOKEN` in `.env` / Compose (demo default in `.env.example`).
@@ -20,12 +20,11 @@
 From the repo root:
 
 ```bash
-docker run --rm --network host \
-  -v "$(pwd)/load/k6:/scripts:ro" \
+docker run --rm -i --network host \
   -e BASE=http://127.0.0.1:8000 \
   -e ADMIN_TOKEN=demo-admin-bootstrap-token-not-for-prod \
   -e K6_PARTNER_PUBLIC_ID=<partner-public-uuidv7> \
-  grafana/k6 run /scripts/outbound_ingest.js
+  grafana/k6 run - < load/k6/outbound_ingest.js
 ```
 
 Equivalent Make target (requires `K6_PARTNER_PUBLIC_ID`; passes `ADMIN_BOOTSTRAP_TOKEN` as `ADMIN_TOKEN` when set):
