@@ -5,16 +5,16 @@ description = "Partner Integration Hub — B2B webhook delivery"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.141,<0.142",
-    "uvicorn[standard]>=0.52,<0.53",
+    "fastapi>=0.141,<0.144",
+    "uvicorn[standard]>=0.52,<0.55",
     "pydantic>=2.8,<3",
     "pydantic-settings>=2.6,<3",
     "structlog>=26,<27",
     "opentelemetry-api>=1.44,<2",
     "opentelemetry-sdk>=1.44,<2",
     "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
-    "sqlalchemy[asyncio]>=2.0,<2.1",
-    "asyncpg>=0.31,<0.32",
+    "sqlalchemy[asyncio]>=2.0,<2.2",
+    "asyncpg>=0.31,<0.33",
     "alembic>=1.13,<2",
     "uuid6>=2025,<2026",
     "cryptography>=50,<51",
@@ -34,10 +34,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8,<9",
-    "pytest-asyncio>=0.23,<1",
-    "ruff>=0.5,<0.6",
-    "mypy>=1.10,<2",
+    "pytest>=8,<10",
+    "pytest-asyncio>=0.23,<2",
+    "ruff>=0.5,<0.18",
+    "mypy>=1.10,<3",
     "pyyaml>=6,<7",
     "pre-commit>=4,<5",
 ]
