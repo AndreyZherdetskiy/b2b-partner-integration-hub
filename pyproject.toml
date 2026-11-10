@@ -5,39 +5,39 @@ description = "Partner Integration Hub — B2B webhook delivery"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.141,<0.142",
-    "uvicorn[standard]>=0.52,<0.53",
+    "fastapi>=0.141,<0.163",
+    "uvicorn[standard]>=0.52,<0.55",
     "pydantic>=2.8,<3",
     "pydantic-settings>=2.6,<3",
     "structlog>=26,<27",
     "opentelemetry-api>=1.44,<2",
     "opentelemetry-sdk>=1.44,<2",
     "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
-    "sqlalchemy[asyncio]>=2.0,<2.1",
-    "asyncpg>=0.31,<0.32",
+    "sqlalchemy[asyncio]>=2.0,<2.2",
+    "asyncpg>=0.31,<0.33",
     "alembic>=1.13,<2",
     "uuid6>=2025,<2026",
     "cryptography>=50,<51",
     "argon2-cffi>=25,<26",
     "pyjwt>=2.8,<3",
     "redis[hiredis]>=8.1,<9",
-    "aiokafka>=0.14,<0.15",
+    "aiokafka>=0.14,<0.16",
     "httpx>=0.28,<0.29",
     "opentelemetry-instrumentation-fastapi>=0.65b0,<0.66",
     "opentelemetry-instrumentation-httpx>=0.65b0,<0.66",
     "opentelemetry-instrumentation-asgi>=0.65b0,<0.66",
     # celery[redis] → kombu[redis] pins redis<6.5; incompatible with redis-py 8.1.
     # Install redis separately (same pattern as billing / support_rag). Broker still Redis.
-    "celery>=5.6,<5.7",
+    "celery>=5.6,<5.8",
     "jsonschema>=4.23,<5",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=8,<9",
-    "pytest-asyncio>=0.23,<1",
-    "ruff>=0.5,<0.6",
-    "mypy>=1.10,<2",
+    "pytest>=8,<10",
+    "pytest-asyncio>=0.23,<2",
+    "ruff>=0.5,<0.18",
+    "mypy>=1.10,<3",
     "pyyaml>=6,<7",
     "pre-commit>=4,<5",
 ]
